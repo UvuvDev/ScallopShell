@@ -13,7 +13,17 @@ Abilities:
 
 # To compile 
 
+First download the capstone package. WITHOUT THIS THIS WILL NOT FUNCTION.
+
 Run this in the terminal:
 
-g++ -g ./src/ptrace_ASM_dump.cpp -L libeventhandler.a -lcapstone -o god_rev_script
+g++ -g ./src/ptrace_ASM_dump.cpp -I./include -L./src/ -leventhandler -lcapstone -o god_rev_script
 
+g++                             Compiler
+-g                              Enable debug symbols
+-$(find . -name "*.cpp")        Compile all files with .cpp
+-I./include                     Path for include files
+-L./src/                        Path for library files
+-leventhandler                  Link the event handler library
+-lcapstone                      Link the Capstone Library
+-o god_rev_script               Name of the binary
