@@ -11,5 +11,9 @@ Abilities:
 - Break if anti debugging techniques are used and log where in the program they are
 - Check every branch of the program and dump memory there too
 
+# To compile 
 
+Run this in the terminal:
+
+g++ -g ./src/ptrace_ASM_dump.cpp -L libeventhandler.a -lcapstone -o god_rev_script
 
