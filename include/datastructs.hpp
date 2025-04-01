@@ -40,8 +40,10 @@ class AddressStack {
         }
 
         void printStack() {
+
+            std::cout << BOLD_YELLOW << "###------BACKTRACE------###" << RESET << "\n";
             for (int i = 0; i < stack.size(); i++) {
-                std::cout << "#" << i << ":\t\t" << (uint64_t*)stack.at(i) << "\n";
+                std::cout << BOLD_YELLOW << "   #" << i << ":\t\t" << (uint64_t*)stack.at(i) << "\n" << RESET;
             }
         }
     

@@ -1,18 +1,46 @@
 #include "asm_dump.hpp"
 #include "datastructs.hpp"
 
-int assemblyDump(pid_t child)
+cs_insn *insn;
+
+// Keep track of backtrace, where we are in the program
+AddressStack backtrace;
+
+void printInstructions(SymbolTable &symbolTable, int j)
+{
+    int symbolI = hasSymbol(symbolTable, insn[j].address);
+
+    if (symbolI != -1)
+    {
+        // Print the modified instruction with symbols
+        std::cout << BOLD_MAGENTA << "  " << symbolTable.at(symbolI).getAddr() << ": " << insn[j].mnemonic << "\t\t" << insn[j].op_str << " |\t<- " << symbolTable.at(symbolI).getDesc() << RESET << "\n";
+
+    }       
+    else
+    {
+        // Print the instruction address, instruction and arguments
+        printf("0x%" PRIx64 ":\t%s\t\t%s\n", insn[j].address, insn[j].mnemonic,
+               insn[j].op_str);
+    }
+
+    if (!strncmp(insn[j].mnemonic, "ret", 3))
+    {
+        backtrace.pop();
+    }
+    if (!strncmp(insn[j].mnemonic, "call", 4))
+    {
+        backtrace.push(insn[j].address);
+    }
+}
+
+int assemblyDump(pid_t child, std::vector<Symbol> &symbolTable)
 {
 
     // Parent process: wait for the child to stop.
     int status;
     struct user_regs_struct regs;
 
-    // Keep track of backtrace, where we are in the program
-    AddressStack backtrace;
-
     csh handle;
-    cs_insn *insn;
     size_t count;
 
     if (cs_open(CS_ARCH_X86, CS_MODE_64, &handle) != CS_ERR_OK)
@@ -70,18 +98,8 @@ int assemblyDump(pid_t child)
             {
                 size_t j;
                 for (j = 0; j < count; j++)
-                {
-                    printf("0x%" PRIx64 ":\t%s\t\t%s\n", insn[j].address, insn[j].mnemonic,
-                           insn[j].op_str);
-
-                    if (!strncmp(insn[j].mnemonic, "ret", 3)) {
-                        backtrace.pop();
-                    }
-                    if (!strncmp(insn[j].mnemonic, "call", 4)) {
-                        backtrace.push(insn[j].address);
-                    }
-
-                }
+                    printInstructions(symbolTable, j);
+                
 
                 cs_free(insn, count);
             }

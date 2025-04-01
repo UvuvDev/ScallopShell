@@ -17,7 +17,7 @@ First download the capstone package. WITHOUT THIS THIS WILL NOT FUNCTION.
 
 Run this in the terminal:
 
-g++ -g ./src/ptrace_ASM_dump.cpp -I./include -L./src/ -leventhandler -lcapstone -o god_rev_script
+g++ -g $(find . -name "*.cpp") -I./include -L./src/ -leventhandler -lcapstone -o god_rev_script
 
 g++                             Compiler
 -g                              Enable debug symbols
@@ -27,3 +27,13 @@ g++                             Compiler
 -leventhandler                  Link the event handler library
 -lcapstone                      Link the Capstone Library
 -o god_rev_script               Name of the binary
+
+# Importing "Symbols"
+
+You can import symbols for certain addresses. These will be labeled differently than stripped instructions. The more symbols you have the slower the program becomes but that's okay for some extra readability!
+
+You have to make a .txt file containing the following format and feed it as a second argument:
+
+Address (in hex)     (NO SPACES AT ALL, max 30 chars) Description
+
+DO NOT HAVE SPACES. I am using scanf("%p %s") it will break the entire code. 

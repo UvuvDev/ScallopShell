@@ -44,3 +44,26 @@ void startupMsg()
 
     file.close(); // Close the file.
 }
+
+char* makeFilepath(char* argv) {
+    // Make a string with "./" prefixed
+    char *filePathDotSlash = (char *)malloc(strlen(argv) * sizeof(char) + 2);
+    filePathDotSlash[0] = '.';
+    filePathDotSlash[1] = '/';
+
+    for (int i = 0; i < strlen(argv); i++)
+        filePathDotSlash[i + 2] = argv[i];
+
+    return filePathDotSlash;
+    
+}
+
+int hasSymbol(SymbolTable table, uint64_t address) {
+
+    for (int i = 0; i < table.size(); i++) {
+        if ((uint64_t)table.at(i).getAddr() == address) return i;
+        
+    }
+    return -1;
+
+}
