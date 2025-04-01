@@ -38,24 +38,25 @@ void handleBacktrace(SymbolTable &symbolTable, int j)
 int assemblyDump(pid_t child, std::vector<Symbol> &symbolTable)
 {
 
+    // This is where GLIBC memory will be stored. 
     std::vector<std::pair<uint64_t, uint64_t>> ignoredFunctions;
     char cmd[50];
-    snprintf(cmd, 50, "cat /proc/%d/maps | grep \"libc\" ", child); 
-    FILE* map = popen(cmd, "r");
+    snprintf(cmd, 50, "cat /proc/%d/maps | grep \"libc\" ", child);
+    FILE *map = popen(cmd, "r"); // Run a command that finds all GLIBC refs in /proc/##/maps
 
-    
     {
         uint64_t lowerLibCTemp;
         uint64_t upperLibCTemp;
-        char junk[100];
         while (fscanf(map, "%lx-%lx %*s %*s %*s %*s %*s", &lowerLibCTemp, &upperLibCTemp) == 7)
             ignoredFunctions.emplace_back(std::make_pair(lowerLibCTemp, upperLibCTemp));
     }
-    
-    for (const auto& range : ignoredFunctions) {
+
+    // Debug print GLIBC memory range
+    for (const auto &range : ignoredFunctions)
+    {
         printf("Range: 0x%lx - 0x%lx\n", range.first, range.second);
     }
-    
+
     fclose(map);
 
     // Parent process: wait for the child to stop.
@@ -65,6 +66,7 @@ int assemblyDump(pid_t child, std::vector<Symbol> &symbolTable)
     csh handle;
     size_t count;
 
+    // If disassembler fails to open, break
     if (cs_open(CS_ARCH_X86, CS_MODE_64, &handle) != CS_ERR_OK)
         return -1;
 
@@ -76,19 +78,19 @@ int assemblyDump(pid_t child, std::vector<Symbol> &symbolTable)
         // Resume the child process.
 
         printf("child pid = %d\n", child);
-        getchar();
+        getchar(); // Debug breakpoint
 
-        int instructionsRun = 0;
         bool inLibC = 0;
 
         uint64_t lastBack = backtrace.top();
 
+        // While the program is running
         while (true)
         {
 
             if (ptrace(PTRACE_SINGLESTEP, child, nullptr, nullptr) == -1)
             {
-                perror("ptrace(PTRACE_SINGLESTEP)");
+                perror("ptrace(PTRACE_SINGLESTEP)"); // Fail
                 break;
             }
 
@@ -106,12 +108,6 @@ int assemblyDump(pid_t child, std::vector<Symbol> &symbolTable)
                 break;
             }
 
-            // If 3 instructions havent been run, continue
-            //      - every instruction is shown only once
-            instructionsRun++;
-            if (instructionsRun % 3 != 0)
-                continue;
-
             // Set the opcode
             unsigned long firstHalf = ptrace(PTRACE_PEEKDATA, child, regs.rip, nullptr);
             unsigned long secondHalf = ptrace(PTRACE_PEEKDATA, child, regs.rip + 8, nullptr);
@@ -121,24 +117,21 @@ int assemblyDump(pid_t child, std::vector<Symbol> &symbolTable)
             // Disassemble the opcode (max 16 bytes), telling it its at the addr $RIP
             count = cs_disasm(handle, opcode, 16, regs.rip, 0, &insn);
 
-            // If there was any instructions:
+            // If there was any instructions, ONLY PRINT THE FIRST ONE DISASSEMBLED
             if (count > 0)
             {
-                size_t j;
-                for (j = 0; j < count; j++)
-                {
-                    printInstructions(symbolTable, j);
-                    handleBacktrace(symbolTable, j);
-                    inLibC = isLibC(ignoredFunctions, regs.rip);
 
-                    if (inLibC)
-                    {
-                        std::cout << BOLD_RED;
-                    }
-                    else
-                    {
-                        std::cout << BOLD_CYAN;
-                    }
+                printInstructions(symbolTable, 0);
+                handleBacktrace(symbolTable, 0);
+                inLibC = isLibC(ignoredFunctions, regs.rip);
+
+                if (inLibC)
+                {
+                    std::cout << BOLD_RED;
+                }
+                else
+                {
+                    std::cout << BOLD_CYAN;
                 }
 
                 cs_free(insn, count);
