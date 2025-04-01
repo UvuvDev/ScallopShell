@@ -24,7 +24,7 @@ class AddressStack {
         // Return the top memory address without removing it.
         uint64_t top() const {
             if (empty()) {
-                throw std::runtime_error("Stack is empty");
+                return 0;
             }
             return stack.back();
         }

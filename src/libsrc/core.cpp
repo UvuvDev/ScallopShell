@@ -67,3 +67,13 @@ int hasSymbol(SymbolTable table, uint64_t address) {
     return -1;
 
 }
+
+
+// Returns true if the given address is within libc.
+bool isLibC(std::vector<std::pair<uint64_t, uint64_t>> libc_addr, uint64_t addr) {
+    
+    for (auto& i : libc_addr) {
+        if (i.first <= addr && i.second >= addr) return true;
+    }
+    return false;
+}

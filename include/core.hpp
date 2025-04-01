@@ -6,7 +6,9 @@
 #include <memory.h>
 #include <fstream>
 #include <iostream>
+#include <cstring>
 
+#include <dlfcn.h>
 #include <sys/ptrace.h>
 #include <sys/types.h>
 #include <sys/user.h>
@@ -109,3 +111,5 @@ char* makeFilepath(char* argv);
  * Check if the address has a value on the symbol table. Return vector index, -1 if fail.
  */
 int hasSymbol(SymbolTable table, uint64_t address);
+
+bool isLibC(std::vector<std::pair<uint64_t, uint64_t>> libc_addr, uint64_t addr);

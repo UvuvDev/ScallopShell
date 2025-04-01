@@ -35,7 +35,6 @@ int main(int argc, char *argv[])
     std::cout << "Ready... ? " << "\n\n";
     getchar();
 
-
     /* When all pre processing is done, fork. */
     pid_t child = fork();
     // If child process...
@@ -61,6 +60,7 @@ int main(int argc, char *argv[])
     // If parent process...
     else if (child > 0)
     {
+        
         assemblyDump(child, symbolTable);
     }
     else

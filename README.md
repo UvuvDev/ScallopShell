@@ -17,7 +17,7 @@ First download the capstone package. WITHOUT THIS THIS WILL NOT FUNCTION.
 
 Run this in the terminal:
 
-g++ -g $(find . -name "*.cpp") -I./include -L./src/ -leventhandler -lcapstone -o god_rev_script
+g++ -g $(find . -name "*.cpp") -I./include -L./src/ -leventhandler -lcapstone -o ScallopShell
 
 g++                             Compiler
 -g                              Enable debug symbols
@@ -26,7 +26,7 @@ g++                             Compiler
 -L./src/                        Path for library files
 -leventhandler                  Link the event handler library
 -lcapstone                      Link the Capstone Library
--o god_rev_script               Name of the binary
+-o ScallopShell               Name of the binary
 
 # Importing "Symbols"
 

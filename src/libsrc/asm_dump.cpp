@@ -14,15 +14,17 @@ void printInstructions(SymbolTable &symbolTable, int j)
     {
         // Print the modified instruction with symbols
         std::cout << BOLD_MAGENTA << "  " << symbolTable.at(symbolI).getAddr() << ": " << insn[j].mnemonic << "\t\t" << insn[j].op_str << " |\t<- " << symbolTable.at(symbolI).getDesc() << RESET << "\n";
-
-    }       
+    }
     else
     {
         // Print the instruction address, instruction and arguments
         printf("0x%" PRIx64 ":\t%s\t\t%s\n", insn[j].address, insn[j].mnemonic,
                insn[j].op_str);
     }
+}
 
+void handleBacktrace(SymbolTable &symbolTable, int j)
+{
     if (!strncmp(insn[j].mnemonic, "ret", 3))
     {
         backtrace.pop();
@@ -35,6 +37,26 @@ void printInstructions(SymbolTable &symbolTable, int j)
 
 int assemblyDump(pid_t child, std::vector<Symbol> &symbolTable)
 {
+
+    std::vector<std::pair<uint64_t, uint64_t>> ignoredFunctions;
+    char cmd[50];
+    snprintf(cmd, 50, "cat /proc/%d/maps | grep \"libc\" ", child); 
+    FILE* map = popen(cmd, "r");
+
+    
+    {
+        uint64_t lowerLibCTemp;
+        uint64_t upperLibCTemp;
+        char junk[100];
+        while (fscanf(map, "%lx-%lx %*s %*s %*s %*s %*s", &lowerLibCTemp, &upperLibCTemp) == 7)
+            ignoredFunctions.emplace_back(std::make_pair(lowerLibCTemp, upperLibCTemp));
+    }
+    
+    for (const auto& range : ignoredFunctions) {
+        printf("Range: 0x%lx - 0x%lx\n", range.first, range.second);
+    }
+    
+    fclose(map);
 
     // Parent process: wait for the child to stop.
     int status;
@@ -53,7 +75,13 @@ int assemblyDump(pid_t child, std::vector<Symbol> &symbolTable)
         std::cout << "Child stopped, now continuing execution." << std::endl;
         // Resume the child process.
 
+        printf("child pid = %d\n", child);
+        getchar();
+
         int instructionsRun = 0;
+        bool inLibC = 0;
+
+        uint64_t lastBack = backtrace.top();
 
         while (true)
         {
@@ -98,8 +126,20 @@ int assemblyDump(pid_t child, std::vector<Symbol> &symbolTable)
             {
                 size_t j;
                 for (j = 0; j < count; j++)
+                {
                     printInstructions(symbolTable, j);
-                
+                    handleBacktrace(symbolTable, j);
+                    inLibC = isLibC(ignoredFunctions, regs.rip);
+
+                    if (inLibC)
+                    {
+                        std::cout << BOLD_RED;
+                    }
+                    else
+                    {
+                        std::cout << BOLD_CYAN;
+                    }
+                }
 
                 cs_free(insn, count);
             }
