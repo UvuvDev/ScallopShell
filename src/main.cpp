@@ -19,14 +19,14 @@ int main(int argc, char *argv[])
     char *symbolsFilepath = makeFilepath(argv[2]);
 
     FILE *symbolFile = fopen(argv[2], "r");
-    std::vector<Symbol> symbolTable;
 
     uint64_t addr;
     char desc[30];
     SymbolType type;
 
-    while (fscanf(symbolFile, "%lx %s %c", &addr, desc, &type) == 3)
+    while (fscanf(symbolFile, "%lx %s %c", &addr, desc, &type) == 3) {
         symbolTable.emplace_back(Symbol(addr, desc, type));
+    }        
 
     fclose(symbolFile);
 
@@ -62,7 +62,7 @@ int main(int argc, char *argv[])
     else if (child > 0)
     {
         
-        assemblyDump(child, symbolTable);
+        assemblyDump(child);
     }
     else
     {

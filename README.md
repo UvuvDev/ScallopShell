@@ -42,3 +42,5 @@ You have to make a .txt file containing the following format and feed it as a se
 Address (in hex).........(NO SPACES AT ALL, max 30 chars)Description..................Symbol_Type
 
 DO NOT HAVE SPACES IN THE DESCRIPTION. I am using scanf("%p %s %c") it will break the entire code. 
+
+If you make the Address 0xF0, it'll allow you to break on every call of the instruction mnemonic (which you use the description for). You still have to write a symbol type, I just use "b" since it's a breakpoint.

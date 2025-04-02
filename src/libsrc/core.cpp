@@ -1,5 +1,7 @@
 #include "core.hpp"
 
+std::vector<std::pair<uint64_t, uint64_t>> ignoredFunctions;
+std::vector<Symbol> symbolTable;
 
 void assignOpcode(uint8_t *opcode, int firstHalf, int secondHalf)
 {
@@ -58,11 +60,19 @@ char* makeFilepath(char* argv) {
     
 }
 
-int hasSymbol(SymbolTable table, uint64_t address) {
+int hasSymbol(uint64_t address) {
 
-    for (int i = 0; i < table.size(); i++) {
-        if ((uint64_t)table.at(i).getAddr() == address) return i;
-        
+    for (int i = 0; i < symbolTable.size(); i++) {
+        if ((uint64_t)symbolTable.at(i).getAddr() == address) return i;
+    }
+    return -1;
+
+}
+
+int hasInstrucBreak(char* instruction) {
+
+    for (int i = 0; i < symbolTable.size(); i++) {
+        if (!strcmp(symbolTable.at(i).getDesc().c_str(), instruction)) return 1;
     }
     return -1;
 
@@ -77,3 +87,4 @@ bool isLibC(std::vector<std::pair<uint64_t, uint64_t>> libc_addr, uint64_t addr)
     }
     return false;
 }
+

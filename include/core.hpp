@@ -102,6 +102,17 @@ public:
 
 typedef std::vector<Symbol> SymbolTable;
 
+
+
+/*===== GLOBAL VARIABLE DEFS =====*/
+
+// 
+extern std::vector<std::pair<uint64_t, uint64_t>> ignoredFunctions;
+// 
+extern std::vector<Symbol> symbolTable;
+
+/*================================*/
+
 /**
  * Make the opcode array given data
  */
@@ -118,6 +129,11 @@ char* makeFilepath(char* argv);
 /**
  * Check if the address has a value on the symbol table. Return vector index, -1 if fail.
  */
-int hasSymbol(SymbolTable table, uint64_t address);
+int hasSymbol(uint64_t address);
+
+/**
+ * Check if the instruction has a break on run (defined by an addr of 0xF0)
+ */
+int hasInstrucBreak(char* instruction);
 
 bool isLibC(std::vector<std::pair<uint64_t, uint64_t>> libc_addr, uint64_t addr);

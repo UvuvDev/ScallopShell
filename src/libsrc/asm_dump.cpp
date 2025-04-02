@@ -6,13 +6,13 @@ cs_insn *insn;
 // Keep track of backtrace, where we are in the program
 AddressStack backtrace;
 
-void printInstructions(SymbolTable &symbolTable, int j)
+void printInstructions(int j)
 {
-    int symbolI = hasSymbol(symbolTable, insn[j].address);
-
+    int symbolI = hasSymbol(insn[j].address);
+    
     if (symbolI != -1)
     {
-
+        // Check if the symbol table has any matches
         if (symbolTable.at(symbolI).getType() == 'b')
         {
             // Print the modified instruction with symbols
@@ -24,16 +24,24 @@ void printInstructions(SymbolTable &symbolTable, int j)
             // Print the modified instruction with symbols
             std::cout << BOLD_MAGENTA << "  " << symbolTable.at(symbolI).getAddr() << ": " << insn[j].mnemonic << "\t\t" << insn[j].op_str << " |\t<- " << symbolTable.at(symbolI).getDesc() << RESET << "\n";
         }
+        
     }
     else
     {
+
+        if (hasInstrucBreak(insn[j].mnemonic) == 1) {
+            std::cout << BOLD_MAGENTA << "  " << insn[j].address << ": " << insn[j].mnemonic << "\t\t" << insn[j].op_str << RESET;
+            getchar();
+            return;
+        }
+
         // Print the instruction address, instruction and arguments
         printf("0x%" PRIx64 ":\t%s\t\t%s\n", insn[j].address, insn[j].mnemonic,
                insn[j].op_str);
     }
 }
 
-void handleBacktrace(SymbolTable &symbolTable, int j)
+void handleBacktrace(int j)
 {
     if (!strncmp(insn[j].mnemonic, "ret", 3))
     {
@@ -45,11 +53,9 @@ void handleBacktrace(SymbolTable &symbolTable, int j)
     }
 }
 
-int assemblyDump(pid_t child, std::vector<Symbol> &symbolTable)
+int assemblyDump(pid_t child)
 {
 
-    // This is where GLIBC memory will be stored.
-    std::vector<std::pair<uint64_t, uint64_t>> ignoredFunctions;
     char cmd[50];
     snprintf(cmd, 50, "cat /proc/%d/maps | grep \"libc\" ", child);
     FILE *map = popen(cmd, "r"); // Run a command that finds all GLIBC refs in /proc/##/maps
@@ -131,8 +137,8 @@ int assemblyDump(pid_t child, std::vector<Symbol> &symbolTable)
             if (count > 0)
             {
 
-                printInstructions(symbolTable, 0);
-                handleBacktrace(symbolTable, 0);
+                printInstructions(0);
+                handleBacktrace(0);
                 inLibC = isLibC(ignoredFunctions, regs.rip);
 
                 if (inLibC)
