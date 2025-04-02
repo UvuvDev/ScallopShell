@@ -56,21 +56,16 @@ void handleBacktrace(int j)
 int assemblyDump(pid_t child)
 {
 
-    char cmd[50];
-    snprintf(cmd, 50, "cat /proc/%d/maps | grep \"libc\" ", child);
+    char cmd[100];
+    snprintf(cmd, 100, "cat /proc/%d/maps | grep \"ld-linux-x86-64.so\" ", child);
     FILE *map = popen(cmd, "r"); // Run a command that finds all GLIBC refs in /proc/##/maps
 
     {
         uint64_t lowerLibCTemp;
         uint64_t upperLibCTemp;
-        while (fscanf(map, "%lx-%lx %*s %*s %*s %*s %*s", &lowerLibCTemp, &upperLibCTemp) == 7)
+        while (fscanf(map, "%lx-%lx%*[^\n]\n", &lowerLibCTemp, &upperLibCTemp) == 2) {
             ignoredFunctions.emplace_back(std::make_pair(lowerLibCTemp, upperLibCTemp));
-    }
-
-    // Debug print GLIBC memory range
-    for (const auto &range : ignoredFunctions)
-    {
-        printf("Range: 0x%lx - 0x%lx\n", range.first, range.second);
+        }
     }
 
     fclose(map);
@@ -97,6 +92,7 @@ int assemblyDump(pid_t child)
         getchar(); // Debug breakpoint
 
         bool inLibC = 0;
+        int instructionsRun = 0;
 
         uint64_t lastBack = backtrace.top();
 
@@ -137,20 +133,41 @@ int assemblyDump(pid_t child)
             if (count > 0)
             {
 
-                printInstructions(0);
-                handleBacktrace(0);
-                inLibC = isLibC(ignoredFunctions, regs.rip);
+                instructionsRun++;
 
+                if (instructionsRun % 1000 == 0) 
+                { 
+                    char cmd[100];
+                    snprintf(cmd, 100, "cat /proc/%d/maps | grep \"libc\" ", child);
+                    FILE *map = popen(cmd, "r"); // Run a command that finds all GLIBC refs in /proc/##/maps
+
+                    {
+                        uint64_t lowerLibCTemp;
+                        uint64_t upperLibCTemp;
+                        while (fscanf(map, "%lx-%lx%*[^\n]\n", &lowerLibCTemp, &upperLibCTemp) == 2) {
+                            ignoredFunctions.emplace_back(std::make_pair(lowerLibCTemp, upperLibCTemp));
+                        }
+                    }
+
+                    fclose(map);
+
+                }
+                inLibC = isIgnored(ignoredFunctions, regs.rip);
+
+                // If in LIBC just 
                 if (inLibC)
                 {
-                    std::cout << BOLD_RED;
-                }
-                else
-                {
-                    std::cout << BOLD_CYAN;
+                    cs_free(insn, count);
+                    continue;
                 }
 
+                printInstructions(0);
+                handleBacktrace(0);
+                
                 cs_free(insn, count);
+
+                
+                
             }
             else
                 printf("ERROR: Failed to disassemble given code!\n");

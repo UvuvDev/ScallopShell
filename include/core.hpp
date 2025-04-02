@@ -136,4 +136,4 @@ int hasSymbol(uint64_t address);
  */
 int hasInstrucBreak(char* instruction);
 
-bool isLibC(std::vector<std::pair<uint64_t, uint64_t>> libc_addr, uint64_t addr);
+bool isIgnored(std::vector<std::pair<uint64_t, uint64_t>> range, uint64_t addr);

@@ -80,9 +80,9 @@ int hasInstrucBreak(char* instruction) {
 
 
 // Returns true if the given address is within libc.
-bool isLibC(std::vector<std::pair<uint64_t, uint64_t>> libc_addr, uint64_t addr) {
+bool isIgnored(std::vector<std::pair<uint64_t, uint64_t>> ranges, uint64_t addr) {
     
-    for (auto& i : libc_addr) {
+    for (auto& i : ranges) {
         if (i.first <= addr && i.second >= addr) return true;
     }
     return false;
