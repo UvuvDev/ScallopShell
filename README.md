@@ -30,10 +30,15 @@ g++                             Compiler
 
 # Importing "Symbols"
 
-You can import symbols for certain addresses. These will be labeled differently than stripped instructions. The more symbols you have the slower the program becomes but that's okay for some extra readability!
+You can import symbols for certain addresses. These will be labeled differently than stripped instructions. The more symbols you have the slower the program becomes but that's okay for some extra readability! 
+
+- b (for breakpoint)
+- s (for symbol)
 
 You have to make a .txt file containing the following format and feed it as a second argument:
 
-Address (in hex)     (NO SPACES AT ALL, max 30 chars) Description
+......... = one space
 
-DO NOT HAVE SPACES. I am using scanf("%p %s") it will break the entire code. 
+Address (in hex).........(NO SPACES AT ALL, max 30 chars)Description..................Symbol_Type
+
+DO NOT HAVE SPACES IN THE DESCRIPTION. I am using scanf("%p %s %c") it will break the entire code. 

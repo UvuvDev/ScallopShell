@@ -23,9 +23,10 @@ int main(int argc, char *argv[])
 
     uint64_t addr;
     char desc[30];
+    SymbolType type;
 
-    while (fscanf(symbolFile, "%lx %s", &addr, desc) == 2)
-        symbolTable.emplace_back(Symbol(addr, desc));
+    while (fscanf(symbolFile, "%lx %s %c", &addr, desc, &type) == 3)
+        symbolTable.emplace_back(Symbol(addr, desc, type));
 
     fclose(symbolFile);
 

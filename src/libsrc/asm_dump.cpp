@@ -12,8 +12,18 @@ void printInstructions(SymbolTable &symbolTable, int j)
 
     if (symbolI != -1)
     {
-        // Print the modified instruction with symbols
-        std::cout << BOLD_MAGENTA << "  " << symbolTable.at(symbolI).getAddr() << ": " << insn[j].mnemonic << "\t\t" << insn[j].op_str << " |\t<- " << symbolTable.at(symbolI).getDesc() << RESET << "\n";
+
+        if (symbolTable.at(symbolI).getType() == 'b')
+        {
+            // Print the modified instruction with symbols
+            std::cout << BOLD_RED << "  " << symbolTable.at(symbolI).getAddr() << ": " << insn[j].mnemonic << "\t\t" << insn[j].op_str << " |\t<- " << symbolTable.at(symbolI).getDesc() << RESET << "\n";
+        
+            getchar(); // wait for user input
+        }
+        else if (symbolTable.at(symbolI).getType() == 's') {
+            // Print the modified instruction with symbols
+            std::cout << BOLD_MAGENTA << "  " << symbolTable.at(symbolI).getAddr() << ": " << insn[j].mnemonic << "\t\t" << insn[j].op_str << " |\t<- " << symbolTable.at(symbolI).getDesc() << RESET << "\n";
+        }
     }
     else
     {
@@ -38,7 +48,7 @@ void handleBacktrace(SymbolTable &symbolTable, int j)
 int assemblyDump(pid_t child, std::vector<Symbol> &symbolTable)
 {
 
-    // This is where GLIBC memory will be stored. 
+    // This is where GLIBC memory will be stored.
     std::vector<std::pair<uint64_t, uint64_t>> ignoredFunctions;
     char cmd[50];
     snprintf(cmd, 50, "cat /proc/%d/maps | grep \"libc\" ", child);

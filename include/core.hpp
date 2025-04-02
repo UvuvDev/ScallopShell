@@ -62,23 +62,27 @@
 #define BG_WHITE      "\033[47m"
 
 
+typedef char SymbolType;
 
 class Symbol
 {
 
     std::string desc;
     uint64_t *addr;
+    SymbolType type;
 
 public:
-    Symbol(uint64_t addr, std::string desc)
+    Symbol(uint64_t addr, std::string desc, SymbolType type)
     {
         this->addr = (uint64_t *)addr;
         this->desc = desc;
+        this->type = type;
     }
-    Symbol(uint64_t addr, char *desc)
+    Symbol(uint64_t addr, char *desc, SymbolType type)
     {
         this->addr = (uint64_t *)addr;
         this->desc = desc;
+        this->type = type;
     }
 
     uint64_t *getAddr()
@@ -89,6 +93,10 @@ public:
     std::string &getDesc()
     {
         return desc;
+    }
+
+    SymbolType getType() {
+        return type;
     }
 };
 

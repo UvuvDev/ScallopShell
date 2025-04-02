@@ -1,8 +1,2 @@
-0x7ffff7e66c10 juice
-0x7ffff7e66c22 bruh
-0x7ffff7e66c23 skib
-0x7ffff7e66c24 nuhuh
-0x7ffff7e66c2f rizz
-0x7ffff7e66c25 huzz
-0x7ffff7e66c39 carti_FWEH
-0x7ffff7e0d221 return_to_evil_func
+0x7ffff7e0ad56 random_break b
+0x7ffff7e0ad51 scary_instruction s
