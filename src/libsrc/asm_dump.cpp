@@ -1,37 +1,43 @@
 #include "asm_dump.hpp"
 #include "datastructs.hpp"
+#include "gui.hpp"
 
 cs_insn *insn;
 
 // Keep track of backtrace, where we are in the program
 AddressStack backtrace;
+CliFlags flags;
+bool runCliThisTick = false;
 
 void printInstructions(int j)
 {
     int symbolI = hasSymbol(insn[j].address);
-    
+
     if (symbolI != -1)
     {
         // Check if the symbol table has any matches
         if (symbolTable.at(symbolI).getType() == 'b')
         {
             // Print the modified instruction with symbols
-            std::cout << BOLD_RED << "  " << symbolTable.at(symbolI).getAddr() << ": " << insn[j].mnemonic << "\t\t" << insn[j].op_str << " |\t<- " << symbolTable.at(symbolI).getDesc() << RESET << "\n";
-        
-            getchar(); // wait for user input
+            std::cout << BOLD_BLUE << "  " << symbolTable.at(symbolI).getAddr() << ": " << insn[j].mnemonic << "\t\t" << insn[j].op_str << " |\t<- " << symbolTable.at(symbolI).getDesc() << RESET << "\n";
+            Cli(&flags);
+            runCliThisTick = true;
+
         }
-        else if (symbolTable.at(symbolI).getType() == 's') {
+        else if (symbolTable.at(symbolI).getType() == 's')
+        {
             // Print the modified instruction with symbols
             std::cout << BOLD_MAGENTA << "  " << symbolTable.at(symbolI).getAddr() << ": " << insn[j].mnemonic << "\t\t" << insn[j].op_str << " |\t<- " << symbolTable.at(symbolI).getDesc() << RESET << "\n";
         }
-        
     }
     else
     {
 
-        if (hasInstrucBreak(insn[j].mnemonic) == 1) {
-            std::cout << BOLD_MAGENTA << "  " << insn[j].address << ": " << insn[j].mnemonic << "\t\t" << insn[j].op_str << RESET;
-            getchar();
+        if (hasInstrucBreak(insn[j].mnemonic) == 1)
+        {
+            std::cout << BOLD_MAGENTA << "  " << (uint64_t *)insn[j].address << ": " << insn[j].mnemonic << "\t\t" << insn[j].op_str << RESET << "\n";
+            Cli(&flags);
+            runCliThisTick = true;
             return;
         }
 
@@ -63,7 +69,8 @@ int assemblyDump(pid_t child)
     {
         uint64_t lowerLibCTemp;
         uint64_t upperLibCTemp;
-        while (fscanf(map, "%lx-%lx%*[^\n]\n", &lowerLibCTemp, &upperLibCTemp) == 2) {
+        while (fscanf(map, "%lx-%lx%*[^\n]\n", &lowerLibCTemp, &upperLibCTemp) == 2)
+        {
             ignoredFunctions.emplace_back(std::make_pair(lowerLibCTemp, upperLibCTemp));
         }
     }
@@ -88,10 +95,12 @@ int assemblyDump(pid_t child)
         std::cout << "Child stopped, now continuing execution." << std::endl;
         // Resume the child process.
 
-        printf("child pid = %d\n", child);
-        getchar(); // Debug breakpoint
+        printf("Child pid = %d\n\n\n", child);
+        // Cli();
 
-        bool inLibC = 0;
+        system("clear");
+
+        bool whereami = 0;
         int instructionsRun = 0;
 
         uint64_t lastBack = backtrace.top();
@@ -134,9 +143,11 @@ int assemblyDump(pid_t child)
             {
 
                 instructionsRun++;
-
-                if (instructionsRun % 1000 == 0) 
-                { 
+                runCliThisTick = false;
+                
+                // Check to see if LibC has been loaded yet
+                if (instructionsRun % 1000 == 0)
+                {
                     char cmd[100];
                     snprintf(cmd, 100, "cat /proc/%d/maps | grep \"libc\" ", child);
                     FILE *map = popen(cmd, "r"); // Run a command that finds all GLIBC refs in /proc/##/maps
@@ -144,33 +155,46 @@ int assemblyDump(pid_t child)
                     {
                         uint64_t lowerLibCTemp;
                         uint64_t upperLibCTemp;
-                        while (fscanf(map, "%lx-%lx%*[^\n]\n", &lowerLibCTemp, &upperLibCTemp) == 2) {
+                        while (fscanf(map, "%lx-%lx%*[^\n]\n", &lowerLibCTemp, &upperLibCTemp) == 2)
+                        {
                             ignoredFunctions.emplace_back(std::make_pair(lowerLibCTemp, upperLibCTemp));
                         }
                     }
 
                     fclose(map);
-
                 }
-                inLibC = isIgnored(ignoredFunctions, regs.rip);
+                
 
-                // If in LIBC just 
-                if (inLibC)
+                whereami = isIgnored(ignoredFunctions, regs.rip);
+
+                // If in LIBC or Kernel Module just skip
+                if (whereami)
                 {
                     cs_free(insn, count);
+                    spinner();
                     continue;
                 }
 
                 printInstructions(0);
                 handleBacktrace(0);
-                
-                cs_free(insn, count);
 
-                
-                
+                // If user wants to break at next instruction, break here
+                if (flags == CliFlags::ni && !runCliThisTick) {
+                    Cli(&flags);
+                }
+
+
+                switch (flags)
+                {
+                case CliFlags::printBack:
+                    backtrace.printStack();
+                    break;
+                }
+
+                cs_free(insn, count);
             }
             else
-                printf("ERROR: Failed to disassemble given code!\n");
+                printf("\tERROR: Failed to disassemble given code!\n");
         }
 
         cs_close(&handle);

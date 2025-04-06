@@ -1,2 +1,2 @@
-0x7ffff7e0ad56 random_break b
-0x7ffff7e0ad51 scary_instruction s
+0x555555555149 main b
+0x555555555160 rand b
