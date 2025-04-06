@@ -22,7 +22,6 @@ void printInstructions(int j)
             std::cout << BOLD_BLUE << "  " << symbolTable.at(symbolI).getAddr() << ": " << insn[j].mnemonic << "\t\t" << insn[j].op_str << " |\t<- " << symbolTable.at(symbolI).getDesc() << RESET << "\n";
             Cli(&flags);
             runCliThisTick = true;
-
         }
         else if (symbolTable.at(symbolI).getType() == 's')
         {
@@ -144,7 +143,7 @@ int assemblyDump(pid_t child)
 
                 instructionsRun++;
                 runCliThisTick = false;
-                
+
                 // Check to see if LibC has been loaded yet
                 if (instructionsRun % 1000 == 0)
                 {
@@ -163,7 +162,6 @@ int assemblyDump(pid_t child)
 
                     fclose(map);
                 }
-                
 
                 whereami = isIgnored(ignoredFunctions, regs.rip);
 
@@ -179,15 +177,40 @@ int assemblyDump(pid_t child)
                 handleBacktrace(0);
 
                 // If user wants to break at next instruction, break here
-                if (flags == CliFlags::ni && !runCliThisTick) {
+                if (flags == CliFlags::ni && !runCliThisTick)
+                {
                     Cli(&flags);
                 }
-
 
                 switch (flags)
                 {
                 case CliFlags::printBack:
-                    backtrace.printStack();
+                    while (flags == CliFlags::printBack)
+                    {
+                        backtrace.printStack();
+                        Cli(&flags);
+                    }
+                    break;
+                case CliFlags::breakpoint:
+                    while (flags == CliFlags::breakpoint)
+                    {
+                        uint64_t addr;
+                        char desc[30];
+                        char save[10];
+
+                        printf("address  desc  saveToFile?  |  ");
+                        scanf("%lx %30s %10s", &addr, desc, save);
+                        symbolTable.emplace_back(Symbol(addr, desc, 'b'));
+
+                        if (save[0] == 's')
+                        {
+                            FILE *symbolFile = fopen("ScallopSymbols.txt", "a");
+                            fprintf(symbolFile, "0x%lx %s b\n", addr, desc);
+                            fclose(symbolFile);
+                        }
+
+                        Cli(&flags);
+                    }
                     break;
                 }
 

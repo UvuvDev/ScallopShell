@@ -30,6 +30,8 @@ int main(int argc, char *argv[])
 
     fclose(symbolFile);
 
+    
+
     // Display read me
     startupMsg();
 
