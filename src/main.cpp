@@ -15,6 +15,8 @@
 int main(int argc, char *argv[])
 {
 
+    system("clear");
+
     char *programFilepath = makeFilepath(argv[1]);
     char *symbolsFilepath = makeFilepath(argv[2]);
 

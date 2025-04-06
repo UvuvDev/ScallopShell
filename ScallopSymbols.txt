@@ -1,4 +1,4 @@
-0x5555555550f8 flint_and_steeeeeel b
-0x55555555514e chicken_jockeyyyy b
-0x55555555514e i_am_steeeeeve b
-0x555555555158 water_bucket_release b
+0x555555555040 printf b
+0x555555555040 printf b
+0xf0 rizz b
+0xf0 llll b

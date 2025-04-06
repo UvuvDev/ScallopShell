@@ -8,6 +8,7 @@ cs_insn *insn;
 AddressStack backtrace;
 CliFlags flags;
 bool runCliThisTick = false;
+bool started = false;
 
 void printInstructions(int j)
 {
@@ -182,6 +183,12 @@ int assemblyDump(pid_t child)
                     Cli(&flags);
                 }
 
+                // If in regular program and it's the first instruction, break
+                if (!whereami){
+                    if (!started) Cli(&flags);
+                    started = true;
+                }
+
                 switch (flags)
                 {
                 case CliFlags::printBack:
@@ -209,8 +216,13 @@ int assemblyDump(pid_t child)
                             fclose(symbolFile);
                         }
 
+                        if (getchar() != EOF);
+
                         Cli(&flags);
                     }
+                    break;
+                case CliFlags::starti:
+                    // idk what to do here. restart the program i guess?
                     break;
                 }
 

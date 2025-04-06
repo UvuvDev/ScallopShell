@@ -6,7 +6,8 @@ enum class CliFlags {
     printBack = 2,
     ni = 3,
     breakpoint = 4,
-    lay = 5
+    lay = 5,
+    starti = 6
 };
 
 int Cli(CliFlags* flags);
