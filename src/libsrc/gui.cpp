@@ -4,7 +4,7 @@ int Cli(CliFlags* flags)
 {
 
     char cmd[20];
-
+    printf(" > ");
     scanf("%s", cmd);
 
     if (!strncmp(cmd, "back", 4))
@@ -31,6 +31,11 @@ int Cli(CliFlags* flags)
     {
         *flags = CliFlags::lay;
         return 1;
+    }
+    if (!strncmp(cmd, "q", 1))
+    {
+        printf("Exiting Scallop Shell....\n");
+        exit(1);
     }
     
     
