@@ -8,6 +8,7 @@ int Cli(CliFlags* flags)
     int ch;
 
     fgets(cmd, 20, stdin);
+    clearLine();
 
     if (!strncmp(cmd, "\n", 1)) {
         return 2;
@@ -25,6 +26,11 @@ int Cli(CliFlags* flags)
     if (!strncmp(cmd, "b", 1))
     {
         *flags = CliFlags::breakpoint;
+        return 1;
+    }
+    if (!strncmp(cmd, "clear", 5))
+    {
+        *flags = CliFlags::clear;
         return 1;
     }
     if (!strncmp(cmd, "c", 1))
@@ -81,4 +87,10 @@ void spinner()
         break;
     }
     x++;
+}
+
+void clearLine() {
+    // Move the cursor up one line and clear that line:
+    printf("\033[1A");  // Move up one line
+    printf("\033[K");   // Clear from cursor to end of line
 }

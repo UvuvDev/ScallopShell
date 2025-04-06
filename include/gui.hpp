@@ -7,8 +7,10 @@ enum class CliFlags {
     ni = 3,
     breakpoint = 4,
     lay = 5,
-    starti = 6
+    starti = 6,
+    clear = 7
 };
 
 int Cli(CliFlags* flags);
 void spinner();
+void clearLine();

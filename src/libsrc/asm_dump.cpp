@@ -207,6 +207,8 @@ int assemblyDump(pid_t child)
 
                         printf("address  desc  saveToFile?  |  ");
                         scanf("%lx %30s %10s", &addr, desc, save);
+                        clearLine();
+
                         symbolTable.emplace_back(Symbol(addr, desc, 'b'));
 
                         if (save[0] == 's')
@@ -216,7 +218,8 @@ int assemblyDump(pid_t child)
                             fclose(symbolFile);
                         }
 
-                        if (getchar() != EOF);
+                        if (getchar() != EOF); // Clears the newline out of the buffer, 
+                            // which prevents restarting of command
 
                         Cli(&flags);
                     }
@@ -224,6 +227,12 @@ int assemblyDump(pid_t child)
                 case CliFlags::starti:
                     // idk what to do here. restart the program i guess?
                     break;
+                case CliFlags::clear:
+                    while (flags == CliFlags::clear) {
+                        system("clear");
+                        Cli(&flags);
+                    }
+
                 }
 
                 cs_free(insn, count);
