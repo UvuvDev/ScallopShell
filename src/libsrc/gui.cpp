@@ -38,6 +38,11 @@ int Cli(CliFlags* flags)
         *flags = CliFlags::contin;
         return 1;
     }
+    if (!strncmp(cmd, "info", 4))
+    {
+        *flags = CliFlags::info;
+        return 1;
+    }
     if (!strncmp(cmd, "lay", 3))
     {
         *flags = CliFlags::lay;

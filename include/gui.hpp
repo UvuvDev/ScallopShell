@@ -8,7 +8,8 @@ enum class CliFlags {
     breakpoint = 4,
     lay = 5,
     starti = 6,
-    clear = 7
+    clear = 7,
+    info = 8
 };
 
 int Cli(CliFlags* flags);

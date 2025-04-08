@@ -59,6 +59,69 @@ void handleBacktrace(int j)
     }
 }
 
+int runFlags(int childPID)
+{
+    // Do flag operations
+    switch (flags)
+    {
+    case CliFlags::printBack:
+
+        backtrace.printStack();
+        Cli(&flags);
+
+        break;
+    case CliFlags::breakpoint:
+
+        uint64_t addr;
+        char desc[30];
+        char save[10];
+
+        printf("\taddress  desc  saveToFile?  |  ");
+        scanf("%lx %30s %10s", &addr, desc, save);
+        clearLine();
+
+        symbolTable.emplace_back(Symbol(addr, desc, 'b'));
+
+        if (save[0] == 's')
+        {
+            FILE *symbolFile = fopen("ScallopSymbols.txt", "a");
+            fprintf(symbolFile, "0x%lx %s b\n", addr, desc);
+            fclose(symbolFile);
+        }
+
+        if (getchar() != EOF)
+            ; // Clears the newline out of the buffer,
+        // which prevents restarting of command
+
+        Cli(&flags);
+
+        break;
+    case CliFlags::starti:
+        // idk what to do here. restart the program but how?
+        break;
+    case CliFlags::clear:
+
+        system("clear");
+        Cli(&flags);
+
+        break;
+    case CliFlags::info:
+
+        std::cout << "Process ID = " << childPID << "\n";
+
+        Cli(&flags);
+
+        break;
+    }
+
+    return 0;
+}
+
+bool moveOn()
+{
+    return (flags == CliFlags::contin) || (flags == CliFlags::ni);
+}
+
 int assemblyDump(pid_t child)
 {
 
@@ -146,7 +209,7 @@ int assemblyDump(pid_t child)
                 runCliThisTick = false;
 
                 // Check to see if LibC has been loaded yet
-                if (instructionsRun % 1000 == 0)
+                if (instructionsRun % 1000 == 0 && !started)
                 {
                     char cmd[100];
                     snprintf(cmd, 100, "cat /proc/%d/maps | grep \"libc\" ", child);
@@ -184,55 +247,16 @@ int assemblyDump(pid_t child)
                 }
 
                 // If in regular program and it's the first instruction, break
-                if (!whereami){
-                    if (!started) Cli(&flags);
+                if (!whereami)
+                {
+                    if (!started)
+                        Cli(&flags);
                     started = true;
                 }
 
-                switch (flags)
+                while (!moveOn())
                 {
-                case CliFlags::printBack:
-                    while (flags == CliFlags::printBack)
-                    {
-                        backtrace.printStack();
-                        Cli(&flags);
-                    }
-                    break;
-                case CliFlags::breakpoint:
-                    while (flags == CliFlags::breakpoint)
-                    {
-                        uint64_t addr;
-                        char desc[30];
-                        char save[10];
-
-                        printf("address  desc  saveToFile?  |  ");
-                        scanf("%lx %30s %10s", &addr, desc, save);
-                        clearLine();
-
-                        symbolTable.emplace_back(Symbol(addr, desc, 'b'));
-
-                        if (save[0] == 's')
-                        {
-                            FILE *symbolFile = fopen("ScallopSymbols.txt", "a");
-                            fprintf(symbolFile, "0x%lx %s b\n", addr, desc);
-                            fclose(symbolFile);
-                        }
-
-                        if (getchar() != EOF); // Clears the newline out of the buffer, 
-                            // which prevents restarting of command
-
-                        Cli(&flags);
-                    }
-                    break;
-                case CliFlags::starti:
-                    // idk what to do here. restart the program i guess?
-                    break;
-                case CliFlags::clear:
-                    while (flags == CliFlags::clear) {
-                        system("clear");
-                        Cli(&flags);
-                    }
-
+                    runFlags(child);
                 }
 
                 cs_free(insn, count);
