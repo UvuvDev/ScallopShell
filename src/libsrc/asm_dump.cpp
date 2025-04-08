@@ -64,6 +64,17 @@ int runFlags(int childPID)
     // Do flag operations
     switch (flags)
     {
+    case CliFlags::ni:
+        // If user wants to break at next instruction, break here
+        if (!runCliThisTick)
+        {
+            Cli(&flags);
+            return -1;
+        }
+        break;
+    case CliFlags::contin:
+        return -1;
+        break;
     case CliFlags::printBack:
 
         backtrace.printStack();
@@ -119,12 +130,11 @@ int runFlags(int childPID)
 
 bool moveOn()
 {
-    return (flags == CliFlags::contin) || (flags == CliFlags::ni);
+    return (flags == CliFlags::contin);
 }
 
-int assemblyDump(pid_t child)
+int filterLinuxInit(pid_t child)
 {
-
     char cmd[100];
     snprintf(cmd, 100, "cat /proc/%d/maps | grep \"ld-linux-x86-64.so\" ", child);
     FILE *map = popen(cmd, "r"); // Run a command that finds all GLIBC refs in /proc/##/maps
@@ -140,12 +150,74 @@ int assemblyDump(pid_t child)
 
     fclose(map);
 
+    return 0;
+}
+
+int filterLibC(pid_t child, int instructionsRun)
+{
+    // Check to see if LibC has been loaded yet
+    if (instructionsRun % 1000 == 0 && !started)
+    {
+        char cmd[100];
+        snprintf(cmd, 100, "cat /proc/%d/maps | grep \"libc\" ", child);
+        FILE *map = popen(cmd, "r"); // Run a command that finds all GLIBC refs in /proc/##/maps
+
+        {
+            uint64_t lowerLibCTemp;
+            uint64_t upperLibCTemp;
+            while (fscanf(map, "%lx-%lx%*[^\n]\n", &lowerLibCTemp, &upperLibCTemp) == 2)
+            {
+                ignoredFunctions.emplace_back(std::make_pair(lowerLibCTemp, upperLibCTemp));
+            }
+        }
+
+        fclose(map);
+    }
+    return 0;
+}
+
+size_t disassemble(pid_t child, struct user_regs_struct *regs, csh *handle, int *status)
+{
+
+    if (ptrace(PTRACE_SINGLESTEP, child, nullptr, nullptr) == -1)
+    {
+        perror("ptrace(PTRACE_SINGLESTEP)"); // Fail
+        return -1;
+    }
+
+    waitpid(child, status, 0);
+
+    if (WIFEXITED(*status))
+    {
+        printf("Program exited, breaking\n");
+        return -1;
+    }
+
+    if (ptrace(PTRACE_GETREGS, child, nullptr, regs) == -1)
+    {
+        perror("ptrace(PTRACE_GETREGS)");
+        return -1;
+    }
+
+    // Set the opcode
+    unsigned long firstHalf = ptrace(PTRACE_PEEKDATA, child, (*regs).rip, nullptr);
+    unsigned long secondHalf = ptrace(PTRACE_PEEKDATA, child, (*regs).rip + 8, nullptr);
+    uint8_t opcode[16];
+    assignOpcode(opcode, firstHalf, secondHalf);
+
+    // Disassemble the opcode (max 16 bytes), telling it its at the addr $RIP
+    return cs_disasm(*handle, opcode, 16, (*regs).rip, 0, &insn);
+}
+
+int assemblyDump(pid_t child)
+{
+
+    filterLinuxInit(child);
+
     // Parent process: wait for the child to stop.
     int status;
     struct user_regs_struct regs;
-
     csh handle;
-    size_t count;
 
     // If disassembler fails to open, break
     if (cs_open(CS_ARCH_X86, CS_MODE_64, &handle) != CS_ERR_OK)
@@ -158,48 +230,20 @@ int assemblyDump(pid_t child)
         std::cout << "Child stopped, now continuing execution." << std::endl;
         // Resume the child process.
 
-        printf("Child pid = %d\n\n\n", child);
-        // Cli();
-
         system("clear");
 
         bool whereami = 0;
         int instructionsRun = 0;
-
         uint64_t lastBack = backtrace.top();
+        flags = CliFlags::ni;
 
         // While the program is running
         while (true)
         {
 
-            if (ptrace(PTRACE_SINGLESTEP, child, nullptr, nullptr) == -1)
-            {
-                perror("ptrace(PTRACE_SINGLESTEP)"); // Fail
+            size_t count = disassemble(child, &regs, &handle, &status);
+            if (count < 0)
                 break;
-            }
-
-            waitpid(child, &status, 0);
-
-            if (WIFEXITED(status))
-            {
-                printf("Program exited, breaking\n");
-                break;
-            }
-
-            if (ptrace(PTRACE_GETREGS, child, nullptr, &regs) == -1)
-            {
-                perror("ptrace(PTRACE_GETREGS)");
-                break;
-            }
-
-            // Set the opcode
-            unsigned long firstHalf = ptrace(PTRACE_PEEKDATA, child, regs.rip, nullptr);
-            unsigned long secondHalf = ptrace(PTRACE_PEEKDATA, child, regs.rip + 8, nullptr);
-            uint8_t opcode[16];
-            assignOpcode(opcode, firstHalf, secondHalf);
-
-            // Disassemble the opcode (max 16 bytes), telling it its at the addr $RIP
-            count = cs_disasm(handle, opcode, 16, regs.rip, 0, &insn);
 
             // If there was any instructions, ONLY PRINT THE FIRST ONE DISASSEMBLED
             if (count > 0)
@@ -208,25 +252,8 @@ int assemblyDump(pid_t child)
                 instructionsRun++;
                 runCliThisTick = false;
 
-                // Check to see if LibC has been loaded yet
-                if (instructionsRun % 1000 == 0 && !started)
-                {
-                    char cmd[100];
-                    snprintf(cmd, 100, "cat /proc/%d/maps | grep \"libc\" ", child);
-                    FILE *map = popen(cmd, "r"); // Run a command that finds all GLIBC refs in /proc/##/maps
-
-                    {
-                        uint64_t lowerLibCTemp;
-                        uint64_t upperLibCTemp;
-                        while (fscanf(map, "%lx-%lx%*[^\n]\n", &lowerLibCTemp, &upperLibCTemp) == 2)
-                        {
-                            ignoredFunctions.emplace_back(std::make_pair(lowerLibCTemp, upperLibCTemp));
-                        }
-                    }
-
-                    fclose(map);
-                }
-
+                // If instructionsRun % 1000 == 0 then check for LibC
+                filterLibC(child, instructionsRun);
                 whereami = isIgnored(ignoredFunctions, regs.rip);
 
                 // If in LIBC or Kernel Module just skip
@@ -238,25 +265,11 @@ int assemblyDump(pid_t child)
                 }
 
                 printInstructions(0);
-                handleBacktrace(0);
-
-                // If user wants to break at next instruction, break here
-                if (flags == CliFlags::ni && !runCliThisTick)
-                {
-                    Cli(&flags);
-                }
-
-                // If in regular program and it's the first instruction, break
-                if (!whereami)
-                {
-                    if (!started)
-                        Cli(&flags);
-                    started = true;
-                }
+                handleBacktrace(0);                
 
                 while (!moveOn())
                 {
-                    runFlags(child);
+                    if (runFlags(child) == -1) break;
                 }
 
                 cs_free(insn, count);

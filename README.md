@@ -28,6 +28,9 @@ g++                             Compiler
 -lcapstone                      Link the Capstone Library
 -o ScallopShell               Name of the binary
 
+If you want to add it to your command line, copy paste this into your .bashrc file (located in ~/)
+
+export PATH=$PATH:~/path/to/package
 # Importing "Symbols"
 
 You can import symbols for certain addresses. These will be labeled differently than stripped instructions. The more symbols you have the slower the program becomes but that's okay for some extra readability! 
