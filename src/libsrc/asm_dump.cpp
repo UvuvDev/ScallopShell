@@ -324,11 +324,13 @@ int assemblyDump(pid_t child)
         // While the program is running
         while (true)
         {
+            
             uint64_t lastRIP = regs.rip;
             int paddingLen;
 
             size_t count = disassemble(child, &regs, &handle, &status, &paddingLen);
-            if (count < 0) {
+            
+            if ((signed long)count < 0) {
                 break;
             }
 
