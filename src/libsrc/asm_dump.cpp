@@ -6,6 +6,8 @@ cs_insn *insn;
 
 // Keep track of backtrace, where we are in the program
 AddressStack backtrace;
+std::shared_ptr<LinkedList> jumpTable;
+
 CliFlags flags;
 bool runCliThisTick = false;
 bool started = false;
@@ -13,8 +15,28 @@ bool started = false;
 void printInstructions(int j)
 {
     int symbolI = hasSymbol(insn[j].address);
+    int loopI = hasLoopSymbol(insn[j].address);
 
-    if (symbolI != -1)
+    if (loopI != -1) {
+
+        if (memMaps.at(loopI).run < memMaps.at(loopI).maxrun) {
+            
+            if (insn[j].address == memMaps.at(loopI).bottomAddr) 
+                std::cout << BOLD_GREEN << "\n  #--------" << memMaps.at(loopI).desc << "--------#\n\n" << RESET;
+
+            // Print the instruction address, instruction and arguments
+            printf("\t%s0x%" PRIx64 ":\t%s\t\t%s\n%s", GREEN, insn[j].address, insn[j].mnemonic,
+                insn[j].op_str, RESET);
+
+            if (insn[j].address == memMaps.at(loopI).topAddr) { 
+                memMaps.at(loopI).run++;
+                std::cout << BOLD_GREEN << "\n  #-------- end of " << memMaps.at(loopI).desc << "--------#\n\n" << RESET;
+            }
+        }
+        
+    }
+
+    else if (symbolI != -1)
     {
         // Check if the symbol table has any matches
         if (symbolTable.at(symbolI).getType() == 'b')
@@ -42,8 +64,8 @@ void printInstructions(int j)
         }
 
         // Print the instruction address, instruction and arguments
-        printf("0x%" PRIx64 ":\t%s\t\t%s\n", insn[j].address, insn[j].mnemonic,
-               insn[j].op_str);
+        std::cout << YELLOW << (uint64_t*)insn[j].address << ":\t" << BLUE 
+            << insn[j].mnemonic << "\t\t" << MAGENTA << insn[j].op_str << "\n" << RESET;
     }
 }
 
@@ -76,11 +98,10 @@ int runFlags(int childPID)
         return -1;
         break;
     case CliFlags::printBack:
-
         backtrace.printStack();
         Cli(&flags);
-
         break;
+
     case CliFlags::breakpoint:
 
         uint64_t addr;
@@ -119,7 +140,6 @@ int runFlags(int childPID)
     case CliFlags::info:
 
         std::cout << "Process ID = " << childPID << "\n";
-
         Cli(&flags);
 
         break;
@@ -176,38 +196,102 @@ int filterLibC(pid_t child, int instructionsRun)
     return 0;
 }
 
-size_t disassemble(pid_t child, struct user_regs_struct *regs, csh *handle, int *status)
+size_t disassemble(pid_t child, struct user_regs_struct *regs,
+                   csh *handle, int *status, int *paddingLen,
+                   bool run = true, cs_insn** insnArg = nullptr)
 {
 
-    if (ptrace(PTRACE_SINGLESTEP, child, nullptr, nullptr) == -1)
+    int lastRIP = regs->rip;
+
+    if (run)
     {
-        perror("ptrace(PTRACE_SINGLESTEP)"); // Fail
-        return -1;
+        if (ptrace(PTRACE_SINGLESTEP, child, nullptr, nullptr) == -1)
+        {
+            perror("ptrace(PTRACE_SINGLESTEP)"); // Fail
+            return -1;
+        }
+
+        waitpid(child, status, 0);
+
+        if (WIFEXITED(*status))
+        {
+            printf("Program exited, breaking\n");
+            return -1;
+        }
+
+        if (ptrace(PTRACE_GETREGS, child, nullptr, regs) == -1)
+        {
+            perror("ptrace(PTRACE_GETREGS)");
+            return -1;
+        }
+
+        // Set the opcode
+        unsigned long firstHalf = ptrace(PTRACE_PEEKDATA, child, (*regs).rip, nullptr);
+        unsigned long secondHalf = ptrace(PTRACE_PEEKDATA, child, (*regs).rip + 8, nullptr);
+        uint8_t opcode[16];
+        assignOpcode(opcode, firstHalf, secondHalf);
+
+        *paddingLen = regs->rip - lastRIP;
+
+        // Disassemble the opcode (max 16 bytes), telling it its at the addr $RIP
+        return cs_disasm(*handle, opcode, 16, (*regs).rip, 0, &insn);
+    }
+    else {
+        // Set the opcode
+        unsigned long firstHalf = ptrace(PTRACE_PEEKDATA, child, (*regs).rip, nullptr);
+        unsigned long secondHalf = ptrace(PTRACE_PEEKDATA, child, (*regs).rip + 8, nullptr);
+        uint8_t opcode[16];
+        assignOpcode(opcode, firstHalf, secondHalf);
+
+        *paddingLen = regs->rip - lastRIP;
+
+        // Disassemble the opcode (max 16 bytes), telling it its at the addr $RIP
+        return cs_disasm(*handle, opcode, 16, lastRIP, 0, insnArg);
     }
 
-    waitpid(child, status, 0);
-
-    if (WIFEXITED(*status))
-    {
-        printf("Program exited, breaking\n");
-        return -1;
-    }
-
-    if (ptrace(PTRACE_GETREGS, child, nullptr, regs) == -1)
-    {
-        perror("ptrace(PTRACE_GETREGS)");
-        return -1;
-    }
-
-    // Set the opcode
-    unsigned long firstHalf = ptrace(PTRACE_PEEKDATA, child, (*regs).rip, nullptr);
-    unsigned long secondHalf = ptrace(PTRACE_PEEKDATA, child, (*regs).rip + 8, nullptr);
-    uint8_t opcode[16];
-    assignOpcode(opcode, firstHalf, secondHalf);
-
-    // Disassemble the opcode (max 16 bytes), telling it its at the addr $RIP
-    return cs_disasm(*handle, opcode, 16, (*regs).rip, 0, &insn);
+    
 }
+/*
+bool jumpOccurred(user_regs_struct *regs, uint64_t *jmpAddrArg, 
+        uint64_t *stayAddrArg, uint64_t lastRIP, 
+        int paddingLen, pid_t child)
+{
+
+    csh tempHandler;
+    cs_insn* tempInsn;
+    user_regs_struct tempReg;
+    int status;
+
+    // If disassembler fails to open, break
+    if (cs_open(CS_ARCH_X86, CS_MODE_64, &tempHandler) != CS_ERR_OK)
+        return -1;
+
+    // Disassemble 
+    int cnt = disassemble(child, &tempReg, &tempHandler, &status, &paddingLen, false, &tempInsn);
+
+
+    *stayAddrArg = lastRIP;
+    
+    // Jump didn't occur. Set Jmp Addr to 0 and stayAddrArg to
+    if (cnt > 0 && lastRIP + tempInsn[0].size == regs->rip)
+    {
+        *jmpAddrArg = 0;
+        return false;
+    }
+    else if (cnt > 1 && lastRIP + tempInsn[0].size + tempInsn[1].size == regs->rip) {
+        *jmpAddrArg = 0;
+        return false;
+    }
+    else
+    {
+        *jmpAddrArg = regs->rip;
+        // printf("stayaddr = 0x%lx\t\tjmpaddr = 0x%lx", *stayAddrArg, *jmpAddrArg);
+        return true;
+    }
+    
+    cs_close(&tempHandler);
+
+}*/
 
 int assemblyDump(pid_t child)
 {
@@ -240,10 +324,13 @@ int assemblyDump(pid_t child)
         // While the program is running
         while (true)
         {
+            uint64_t lastRIP = regs.rip;
+            int paddingLen;
 
-            size_t count = disassemble(child, &regs, &handle, &status);
-            if (count < 0)
+            size_t count = disassemble(child, &regs, &handle, &status, &paddingLen);
+            if (count < 0) {
                 break;
+            }
 
             // If there was any instructions, ONLY PRINT THE FIRST ONE DISASSEMBLED
             if (count > 0)
@@ -264,18 +351,80 @@ int assemblyDump(pid_t child)
                     continue;
                 }
 
-                printInstructions(0);
-                handleBacktrace(0);                
+                /*uint64_t jmpAddr;
+                uint64_t stayAddr;
+                bool jumped = jumpOccurred(&regs, &jmpAddr, &stayAddr, lastRIP, paddingLen, child);
 
-                while (!moveOn())
+                // If theres a jump instruction
+                if (jumped)
                 {
-                    if (runFlags(child) == -1) break;
+
+                    std::shared_ptr<LinkedList> lastNode = jumpTable;
+                    int length = 0;
+
+                    uint64_t jmpAddr = regs.rip;
+                    // printf("\n\n");
+                    bool duplicateFound = false;
+
+                    while (lastNode != NULL && lastNode->next != NULL)
+                    {
+                        if (lastNode->jmpAddr == jmpAddr)
+                        {
+                            lastNode->next = NULL;
+                            duplicateFound = true;
+                            break;
+                        }
+                        else if (lastNode->stayAddr == stayAddr)
+                        {
+                            lastNode->next = NULL;
+                            duplicateFound = true;
+                            break;
+                        }
+                        // printf(" 0x%lx -> ", lastNode->jmpAddr);
+                        length++;
+                        lastNode = lastNode->next;
+                    }
+
+                    if (!duplicateFound)
+                    {
+                        std::shared_ptr<LinkedList> newNode = std::make_shared<LinkedList>(nullptr, jmpAddr, stayAddr);
+                        // printf("new addr = %lx", jmpAddr);
+                        if (jumpTable == NULL)
+                        {
+                            jumpTable = newNode;
+                        }
+                        else
+                        {
+                            lastNode->next = newNode;
+                        }
+                    }
+
+                    jumpTable->printList();
+
+                    // printf("\n\n");
+
+                    printInstructions(0);
+                    handleBacktrace(0);
+                }*/
+
+                printInstructions(0);
+                handleBacktrace(0);
+
+                if (hasLoopSymbol(insn[0].address) == -1) {
+                    while (!moveOn())
+                    {
+                        if (runFlags(child) == -1)
+                            break;
+                    }
                 }
 
                 cs_free(insn, count);
             }
-            else
+            else {
+                printf(BLACK);
                 printf("\tERROR: Failed to disassemble given code!\n");
+                printf(RESET);
+            }
         }
 
         cs_close(&handle);

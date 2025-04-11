@@ -2,6 +2,7 @@
 
 std::vector<std::pair<uint64_t, uint64_t>> ignoredFunctions;
 std::vector<Symbol> symbolTable;
+std::vector<MemMap> memMaps;
 
 void assignOpcode(uint8_t *opcode, int firstHalf, int secondHalf)
 {
@@ -64,6 +65,15 @@ int hasSymbol(uint64_t address) {
 
     for (int i = 0; i < symbolTable.size(); i++) {
         if ((uint64_t)symbolTable.at(i).getAddr() == address) return i;
+    }
+    return -1;
+
+}
+
+int hasLoopSymbol(uint64_t address) {
+
+    for (int i = 0; i < memMaps.size(); i++) {
+        if (memMaps.at(i).bottomAddr <= address && memMaps.at(i).topAddr >= address) return i;
     }
     return -1;
 

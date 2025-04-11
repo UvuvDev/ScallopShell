@@ -27,7 +27,20 @@ int main(int argc, char *argv[])
     SymbolType type;
 
     while (fscanf(symbolFile, "%lx %s %c", &addr, desc, &type) == 3) {
-        symbolTable.emplace_back(Symbol(addr, desc, type));
+        switch (type) {
+        case 's':
+            symbolTable.emplace_back(Symbol(addr, desc, type));
+            break;
+        case 'b':
+            symbolTable.emplace_back(Symbol(addr, desc, type));
+            break;
+        case 'l':
+            uint64_t topAddr; 
+            int maxrun;
+            fscanf(symbolFile, "%lx %d", &topAddr, &maxrun);
+            memMaps.emplace_back(addr, topAddr, desc, type, maxrun);
+            break;
+        }
     }        
 
     fclose(symbolFile);
