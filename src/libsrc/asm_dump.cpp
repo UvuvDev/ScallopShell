@@ -12,77 +12,15 @@ CliFlags flags;
 bool runCliThisTick = false;
 bool started = false;
 
-void printInstructions(int j)
+void handleBacktrace()
 {
-    int symbolI = hasSymbol(insn[j].address);
-    int loopI = hasLoopSymbol(insn[j].address);
-
-    if (loopI != -1)
-    {
-
-        if (memMaps.at(loopI).canRun())
-        {
-
-            if (insn[j].address == memMaps.at(loopI).bottomAddr)
-                std::cout << BOLD_GREEN << "\n  #--------" << memMaps.at(loopI).desc << "--------#\n\n"
-                          << RESET;
-
-            // Print the instruction address, instruction and arguments
-            printf("\t%s0x%" PRIx64 ":\t%s\t\t%s\n%s", GREEN, insn[j].address, insn[j].mnemonic,
-                   insn[j].op_str, RESET);
-
-            if (insn[j].address == memMaps.at(loopI).topAddr)
-            {
-                memMaps.at(loopI).run++;
-                std::cout << BOLD_GREEN << "\n  #-------- end of " << memMaps.at(loopI).desc << "--------#\n\n"
-                          << RESET;
-            }
-        }
-    }
-
-    else if (symbolI != -1)
-    {
-        // Check if the symbol table has any matches
-        if (symbolTable.at(symbolI).getType() == 'b')
-        {
-            // Print the modified instruction with symbols
-            std::cout << BOLD_BLUE << "  " << symbolTable.at(symbolI).getAddr() << ": " << insn[j].mnemonic << "\t\t" << insn[j].op_str << " |\t<- " << symbolTable.at(symbolI).getDesc() << RESET << "\n";
-            Cli(&flags);
-            runCliThisTick = true;
-        }
-        else if (symbolTable.at(symbolI).getType() == 's')
-        {
-            // Print the modified instruction with symbols
-            std::cout << BOLD_MAGENTA << "  " << symbolTable.at(symbolI).getAddr() << ": " << insn[j].mnemonic << "\t\t" << insn[j].op_str << " |\t<- " << symbolTable.at(symbolI).getDesc() << RESET << "\n";
-        }
-    }
-    else
-    {
-
-        if (hasInstrucBreak(insn[j].mnemonic) == 1)
-        {
-            std::cout << BOLD_MAGENTA << "  " << (uint64_t *)insn[j].address << ": " << insn[j].mnemonic << "\t\t" << insn[j].op_str << RESET << "\n";
-            Cli(&flags);
-            runCliThisTick = true;
-            return;
-        }
-
-        // Print the instruction address, instruction and arguments
-        std::cout << YELLOW << (uint64_t *)insn[j].address << ":\t" << BLUE
-                  << insn[j].mnemonic << "\t\t" << MAGENTA << insn[j].op_str << "\n"
-                  << RESET;
-    }
-}
-
-void handleBacktrace(int j)
-{
-    if (!strncmp(insn[j].mnemonic, "ret", 3))
+    if (!strncmp(insn[0].mnemonic, "ret", 3))
     {
         backtrace.pop();
     }
-    if (!strncmp(insn[j].mnemonic, "call", 4))
+    if (!strncmp(insn[0].mnemonic, "call", 4))
     {
-        backtrace.push(insn[j].address);
+        backtrace.push(insn[0].address);
     }
 }
 
@@ -420,7 +358,8 @@ int assemblyDump(pid_t child)
                 {
                     cs_free(insn, count);
                     spinner();
-                    if (started) isInLibC(regs.rip);
+                    if (started)
+                        isInLibC(regs.rip);
                     continue;
                 }
 
@@ -482,8 +421,8 @@ int assemblyDump(pid_t child)
                     handleBacktrace(0);
                 }*/
 
-                printInstructions(0);
-                handleBacktrace(0);
+                printInstructions();
+                handleBacktrace();
 
                 if (hasLoopSymbol(insn[0].address) == -1)
                 {

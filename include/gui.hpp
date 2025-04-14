@@ -1,3 +1,4 @@
+#pragma once
 #include "core.hpp"
 
 enum class CliFlags {
@@ -15,3 +16,10 @@ enum class CliFlags {
 int Cli(CliFlags* flags);
 void spinner();
 void clearLine();
+
+// Print instructions
+void printMemMap(int index);
+void printBreak(int symbolI);
+void printSymbol(int symbolI);
+void printBasic();
+void printInstructions();

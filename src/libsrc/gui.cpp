@@ -1,4 +1,5 @@
 #include "gui.hpp"
+#include "asm_dump.hpp"
 
 int Cli(CliFlags* flags)
 {
@@ -98,4 +99,98 @@ void clearLine() {
     // Move the cursor up one line and clear that line:
     printf("\033[1A");  // Move up one line
     printf("\033[K");   // Clear from cursor to end of line
+}
+
+
+void printMemMap(int index)
+{
+
+    if (memMaps.at(index).canRun())
+    {
+
+        // If its the top address print the header
+        if (insn[0].address == memMaps.at(index).bottomAddr)
+            std::cout << BOLD_GREEN << "\n  #--------" << memMaps.at(index).desc << "--------#\n\n"
+                      << RESET;
+
+        // Print the instruction address, instruction and arguments
+        printf("\t%s0x%" PRIx64 ":\t%s\t\t%s\n%s", GREEN, insn[0].address, insn[0].mnemonic,
+               insn[0].op_str, RESET);
+
+        // If its the bottom addr print the footer
+        if (insn[0].address == memMaps.at(index).topAddr)
+        {
+            memMaps.at(index).run++;
+            std::cout << BOLD_GREEN << "\n  #-------- end of " << memMaps.at(index).desc << "--------#\n\n"
+                      << RESET;
+        }
+    }
+}
+
+void printBreak(int symbolI)
+{
+
+    // If there's a valid symbol table entry
+    if (symbolI != -1)
+    {
+        // Print the modified instruction with symbols
+        std::cout << BOLD_BLUE << "  " << symbolTable.at(symbolI).getAddr() << ": " << insn[0].mnemonic << "\t\t" << insn[0].op_str << " |\t<- " << symbolTable.at(symbolI).getDesc() << RESET << "\n";
+        Cli(&flags);
+        runCliThisTick = true;
+    }
+    else
+    {
+        // Check if there's an instruction break
+        if (hasInstrucBreak(insn[0].mnemonic) == 1)
+        {
+            std::cout << BOLD_MAGENTA << "  " << (uint64_t *)insn[0].address << ": " << insn[0].mnemonic << "\t\t" << insn[0].op_str << RESET << "\n";
+            Cli(&flags);
+            runCliThisTick = true;
+            return;
+        }
+    }
+}
+
+void printSymbol(int symbolI)
+{
+    // Print the modified instruction with symbols
+    std::cout << BOLD_MAGENTA << "  " << symbolTable.at(symbolI).getAddr() << ": " << insn[0].mnemonic << "\t\t" << insn[0].op_str << " |\t<- " << symbolTable.at(symbolI).getDesc() << RESET << "\n";
+}
+
+void printBasic() {
+    // Print the instruction address, instruction and arguments
+    std::cout << YELLOW << (uint64_t *)insn[0].address << ":\t" << BLUE
+    << insn[0].mnemonic << "\t\t" << MAGENTA << insn[0].op_str << "\n"
+    << RESET;
+}
+
+void printInstructions()
+{
+    int symbolI = hasSymbol(insn[0].address);
+    int mapI = hasLoopSymbol(insn[0].address);
+
+    if (mapI != -1)
+    {
+        printMemMap(mapI);
+    }
+
+    else if (symbolI != -1)
+    {
+        // Check if the symbol table has any matches
+        if (symbolTable.at(symbolI).getType() == 'b')
+        {
+            printBreak(symbolI);
+        }
+        else if (symbolTable.at(symbolI).getType() == 's')
+        {
+            printSymbol(symbolI);
+        }
+    }
+    else
+    {
+
+        printBreak(symbolI);
+        printBasic();
+        
+    }
 }
