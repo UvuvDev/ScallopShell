@@ -4,14 +4,24 @@ Dump all instructions that are run by the program into a text file. You can run 
 
 Pass in your program as an argument to do a memory dump of it.
 
-Abilities:
+Current Functionality:
 
-- Break when memory you want to watch is modified
-- Check memory constantly to see if certain values are there (flags, shellcodes, etc)
-- Break if anti debugging techniques are used and log where in the program they are
-- Check every branch of the program and dump memory there too
+- Disassemble instruction by instruction
+- Mass comment code via "memory maps"
+- Filter LibC and ld.so code
+- Breakpoints
+- GDB-like CLI
+- Backtracing
 
-# To compile 
+Features in Development:
+
+- Jump tracking (a more general backtrace)
+- Watchpoints
+- Examining memory/registers
+- Automated string/flag memory searching
+- ANGR integration
+
+# To compile from source 
 
 First download the capstone package. WITHOUT THIS THIS WILL NOT FUNCTION.
 
@@ -31,12 +41,14 @@ g++                             Compiler
 If you want to add it to your command line, copy paste this into your .bashrc file (located in ~/)
 
 export PATH=$PATH:~/path/to/package
-# Importing "Symbols"
+## Importing "Symbols"
 
 You can import symbols for certain addresses. These will be labeled differently than stripped instructions. The more symbols you have the slower the program becomes but that's okay for some extra readability! 
 
 - b (for breakpoint)
 - s (for symbol)
+- m (for map)
+- l (for loop)
 
 You have to make a .txt file containing the following format and feed it as a second argument:
 
@@ -47,3 +59,13 @@ Address (in hex).........(NO SPACES AT ALL, max 30 chars)Description............
 DO NOT HAVE SPACES IN THE DESCRIPTION. I am using scanf("%p %s %c") it will break the entire code. 
 
 If you make the Address 0xF0, it'll allow you to break on every call of the instruction mnemonic (which you use the description for). You still have to write a symbol type, I just use "b" since it's a breakpoint.
+
+Special cases are for "m" and "l", they have extra arguments. 
+
+- For M, you give one extra address after the type which will create a range of addresses that will be commented during runtime
+
+- For L, you give an extra address AND a number specifying how many times you want to display this loop. Useful for when you have a loop repeating hundreds or thousands of times (like encrypting). 0 means it will never print, -1 will make it always print, and anything above 0 will be valid. Otherwise looks like a memory map.
+
+## LibC printing
+
+Scallop Shell will tell you when $RIP is equal to a symbol from LibC and will tell you what that symbol is. This is very useful for readability. *Be aware that malware will often jump a few instructions ahead of the target symbol. If you believe it's doing this, you will have to run through LibC itself by commenting the continue statement in asm_dump.cpp through source code modification.* 
