@@ -37,10 +37,15 @@ int main(int argc, char *argv[])
             symbolTable.emplace_back(Symbol(addr, desc, type));
             break;
         case 'l':
-            uint64_t topAddr; 
+            uint64_t topAddrLoop; 
             int maxrun;
-            fscanf(symbolFile, "%lx %d", &topAddr, &maxrun);
-            memMaps.emplace_back(addr, topAddr, desc, type, maxrun);
+            fscanf(symbolFile, "%lx %d", &topAddrLoop, &maxrun);
+            memMaps.emplace_back(addr, topAddrLoop, desc, type, maxrun);
+            break;
+        case 'm':
+            uint64_t topAddrMap; 
+            fscanf(symbolFile, "%lx", &topAddrMap);
+            memMaps.emplace_back(addr, topAddrMap, desc, type, -1);
             break;
         }
     }        

@@ -137,6 +137,14 @@ public:
         this->maxrun = maxrun;
         this->run = 0;
     }
+
+    bool canRun() {
+        if (maxrun < 0) return true;
+
+        if (run < maxrun) return true;
+
+        return false;
+    }
 };
 
 /*===== GLOBAL VARIABLE DEFS =====*/

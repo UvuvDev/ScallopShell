@@ -20,7 +20,7 @@ void printInstructions(int j)
     if (loopI != -1)
     {
 
-        if (memMaps.at(loopI).run < memMaps.at(loopI).maxrun)
+        if (memMaps.at(loopI).canRun())
         {
 
             if (insn[j].address == memMaps.at(loopI).bottomAddr)
@@ -193,15 +193,12 @@ int filterLibC(pid_t child, int instructionsRun)
         uint64_t upperLibCTemp;
         uint64_t libcbase = UINT64_MAX;
 
-        
-
         while (fscanf(map, "%lx-%lx%*[^\n]\n", &lowerLibCTemp, &upperLibCTemp) == 2)
         {
             ignoredFunctions.emplace_back(std::make_pair(lowerLibCTemp, upperLibCTemp));
 
             if (lowerLibCTemp < libcbase)
                 libcbase = lowerLibCTemp;
-
         }
 
         pclose(map);
@@ -237,13 +234,12 @@ int filterLibC(pid_t child, int instructionsRun)
             {
                 continue;
             }
-            //printf("Address: 0x%lx, Symbol: %s\n", libcaddr, symbolName);
-            //printf("%lx\n", libcbase);
+            // printf("Address: 0x%lx, Symbol: %s\n", libcaddr, symbolName);
+            // printf("%lx\n", libcbase);
             symbolTable.emplace_back(Symbol(libcbase + libcaddr, symbolName, 's'));
         }
 
         pclose(libc_symbols);
-
     }
     return 0;
 }
@@ -264,7 +260,8 @@ void isInLibC(uint64_t rip)
         else
         {
             std::cout << BOLD_BLUE << "In GLIBC at " << symbolTable.at(i).getDesc()
-                      << "\n" << RESET;
+                      << "\n"
+                      << RESET;
         }
     }
 }
