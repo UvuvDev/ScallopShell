@@ -17,23 +17,27 @@ void printInstructions(int j)
     int symbolI = hasSymbol(insn[j].address);
     int loopI = hasLoopSymbol(insn[j].address);
 
-    if (loopI != -1) {
+    if (loopI != -1)
+    {
 
-        if (memMaps.at(loopI).run < memMaps.at(loopI).maxrun) {
-            
-            if (insn[j].address == memMaps.at(loopI).bottomAddr) 
-                std::cout << BOLD_GREEN << "\n  #--------" << memMaps.at(loopI).desc << "--------#\n\n" << RESET;
+        if (memMaps.at(loopI).run < memMaps.at(loopI).maxrun)
+        {
+
+            if (insn[j].address == memMaps.at(loopI).bottomAddr)
+                std::cout << BOLD_GREEN << "\n  #--------" << memMaps.at(loopI).desc << "--------#\n\n"
+                          << RESET;
 
             // Print the instruction address, instruction and arguments
             printf("\t%s0x%" PRIx64 ":\t%s\t\t%s\n%s", GREEN, insn[j].address, insn[j].mnemonic,
-                insn[j].op_str, RESET);
+                   insn[j].op_str, RESET);
 
-            if (insn[j].address == memMaps.at(loopI).topAddr) { 
+            if (insn[j].address == memMaps.at(loopI).topAddr)
+            {
                 memMaps.at(loopI).run++;
-                std::cout << BOLD_GREEN << "\n  #-------- end of " << memMaps.at(loopI).desc << "--------#\n\n" << RESET;
+                std::cout << BOLD_GREEN << "\n  #-------- end of " << memMaps.at(loopI).desc << "--------#\n\n"
+                          << RESET;
             }
         }
-        
     }
 
     else if (symbolI != -1)
@@ -64,8 +68,9 @@ void printInstructions(int j)
         }
 
         // Print the instruction address, instruction and arguments
-        std::cout << YELLOW << (uint64_t*)insn[j].address << ":\t" << BLUE 
-            << insn[j].mnemonic << "\t\t" << MAGENTA << insn[j].op_str << "\n" << RESET;
+        std::cout << YELLOW << (uint64_t *)insn[j].address << ":\t" << BLUE
+                  << insn[j].mnemonic << "\t\t" << MAGENTA << insn[j].op_str << "\n"
+                  << RESET;
     }
 }
 
@@ -176,29 +181,97 @@ int filterLinuxInit(pid_t child)
 int filterLibC(pid_t child, int instructionsRun)
 {
     // Check to see if LibC has been loaded yet
-    if (instructionsRun % 1000 == 0 && !started)
+    if (instructionsRun % 100000 == 0 && !started)
     {
+
+        /*== READ THE MEMORY MAP OF LIBC ==*/
         char cmd[100];
         snprintf(cmd, 100, "cat /proc/%d/maps | grep \"libc\" ", child);
         FILE *map = popen(cmd, "r"); // Run a command that finds all GLIBC refs in /proc/##/maps
 
+        uint64_t lowerLibCTemp;
+        uint64_t upperLibCTemp;
+        uint64_t libcbase = UINT64_MAX;
+
+        
+
+        while (fscanf(map, "%lx-%lx%*[^\n]\n", &lowerLibCTemp, &upperLibCTemp) == 2)
         {
-            uint64_t lowerLibCTemp;
-            uint64_t upperLibCTemp;
-            while (fscanf(map, "%lx-%lx%*[^\n]\n", &lowerLibCTemp, &upperLibCTemp) == 2)
-            {
-                ignoredFunctions.emplace_back(std::make_pair(lowerLibCTemp, upperLibCTemp));
-            }
+            ignoredFunctions.emplace_back(std::make_pair(lowerLibCTemp, upperLibCTemp));
+
+            if (lowerLibCTemp < libcbase)
+                libcbase = lowerLibCTemp;
+
         }
 
-        fclose(map);
+        pclose(map);
+
+        /*== LOAD SYMBOL TABLE ==*/
+
+        // Load the symbol table of LibC
+        FILE *libc_symbols = popen("readelf -s /lib/x86_64-linux-gnu/libc.so.6", "r");
+        if (libc_symbols == NULL)
+        {
+            return 1;
+        }
+
+        uint64_t libcaddr;
+        char symbolName[256]; // Make sure the array is large enough
+        char line[1024];
+        int header_found = 0;
+
+        // Process output line by line.
+        while (fgets(line, sizeof(line), libc_symbols) != NULL)
+        {
+            // Look for the header line that begins the symbol table entries.
+            if (!header_found)
+            {
+                if (strstr(line, "Num:") != NULL)
+                {
+                    header_found = 1; // Now the following lines are the entries.
+                }
+                continue; // Skip header lines.
+            }
+
+            if (sscanf(line, " %*d: %lx %*d %*s %*s %*s %*s %[^\n]", &libcaddr, symbolName) != 2)
+            {
+                continue;
+            }
+            //printf("Address: 0x%lx, Symbol: %s\n", libcaddr, symbolName);
+            //printf("%lx\n", libcbase);
+            symbolTable.emplace_back(Symbol(libcbase + libcaddr, symbolName, 's'));
+        }
+
+        pclose(libc_symbols);
+
     }
     return 0;
 }
 
+void isInLibC(uint64_t rip)
+{
+
+    int i = hasSymbol(rip);
+
+    if (i != -1)
+    {
+        if (symbolTable.at(i).getDesc().find("GLIBC") == std::string::npos &&
+            symbolTable.at(i).getDesc().find("glibc") == std::string::npos &&
+            symbolTable.at(i).getDesc().find("GNU") == std::string::npos)
+        {
+            return;
+        }
+        else
+        {
+            std::cout << BOLD_BLUE << "In GLIBC at " << symbolTable.at(i).getDesc()
+                      << "\n" << RESET;
+        }
+    }
+}
+
 size_t disassemble(pid_t child, struct user_regs_struct *regs,
                    csh *handle, int *status, int *paddingLen,
-                   bool run = true, cs_insn** insnArg = nullptr)
+                   bool run = true, cs_insn **insnArg = nullptr)
 {
 
     int lastRIP = regs->rip;
@@ -236,7 +309,8 @@ size_t disassemble(pid_t child, struct user_regs_struct *regs,
         // Disassemble the opcode (max 16 bytes), telling it its at the addr $RIP
         return cs_disasm(*handle, opcode, 16, (*regs).rip, 0, &insn);
     }
-    else {
+    else
+    {
         // Set the opcode
         unsigned long firstHalf = ptrace(PTRACE_PEEKDATA, child, (*regs).rip, nullptr);
         unsigned long secondHalf = ptrace(PTRACE_PEEKDATA, child, (*regs).rip + 8, nullptr);
@@ -248,12 +322,10 @@ size_t disassemble(pid_t child, struct user_regs_struct *regs,
         // Disassemble the opcode (max 16 bytes), telling it its at the addr $RIP
         return cs_disasm(*handle, opcode, 16, lastRIP, 0, insnArg);
     }
-
-    
 }
 /*
-bool jumpOccurred(user_regs_struct *regs, uint64_t *jmpAddrArg, 
-        uint64_t *stayAddrArg, uint64_t lastRIP, 
+bool jumpOccurred(user_regs_struct *regs, uint64_t *jmpAddrArg,
+        uint64_t *stayAddrArg, uint64_t lastRIP,
         int paddingLen, pid_t child)
 {
 
@@ -266,12 +338,12 @@ bool jumpOccurred(user_regs_struct *regs, uint64_t *jmpAddrArg,
     if (cs_open(CS_ARCH_X86, CS_MODE_64, &tempHandler) != CS_ERR_OK)
         return -1;
 
-    // Disassemble 
+    // Disassemble
     int cnt = disassemble(child, &tempReg, &tempHandler, &status, &paddingLen, false, &tempInsn);
 
 
     *stayAddrArg = lastRIP;
-    
+
     // Jump didn't occur. Set Jmp Addr to 0 and stayAddrArg to
     if (cnt > 0 && lastRIP + tempInsn[0].size == regs->rip)
     {
@@ -288,7 +360,7 @@ bool jumpOccurred(user_regs_struct *regs, uint64_t *jmpAddrArg,
         // printf("stayaddr = 0x%lx\t\tjmpaddr = 0x%lx", *stayAddrArg, *jmpAddrArg);
         return true;
     }
-    
+
     cs_close(&tempHandler);
 
 }*/
@@ -324,13 +396,14 @@ int assemblyDump(pid_t child)
         // While the program is running
         while (true)
         {
-            
+
             uint64_t lastRIP = regs.rip;
             int paddingLen;
 
             size_t count = disassemble(child, &regs, &handle, &status, &paddingLen);
-            
-            if ((signed long)count < 0) {
+
+            if ((signed long)count < 0)
+            {
                 break;
             }
 
@@ -350,8 +423,11 @@ int assemblyDump(pid_t child)
                 {
                     cs_free(insn, count);
                     spinner();
+                    isInLibC(regs.rip);
                     continue;
                 }
+
+                started = true;
 
                 /*uint64_t jmpAddr;
                 uint64_t stayAddr;
@@ -412,7 +488,8 @@ int assemblyDump(pid_t child)
                 printInstructions(0);
                 handleBacktrace(0);
 
-                if (hasLoopSymbol(insn[0].address) == -1) {
+                if (hasLoopSymbol(insn[0].address) == -1)
+                {
                     while (!moveOn())
                     {
                         if (runFlags(child) == -1)
@@ -422,7 +499,8 @@ int assemblyDump(pid_t child)
 
                 cs_free(insn, count);
             }
-            else {
+            else
+            {
                 printf(BLACK);
                 printf("\tERROR: Failed to disassemble given code!\n");
                 printf(RESET);

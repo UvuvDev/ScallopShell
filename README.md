@@ -17,7 +17,7 @@ First download the capstone package. WITHOUT THIS THIS WILL NOT FUNCTION.
 
 Run this in the terminal:
 
-g++ -g $(find . -name "*.cpp") -I./include -L./src/ -leventhandler -lcapstone -o ScallopShell
+g++ -g $(find . -name "*.cpp") -I./include -L./src/ -leventhandler -lcapstone -o scallop
 
 g++                             Compiler
 -g                              Enable debug symbols
@@ -26,7 +26,7 @@ g++                             Compiler
 -L./src/                        Path for library files
 -leventhandler                  Link the event handler library
 -lcapstone                      Link the Capstone Library
--o ScallopShell               Name of the binary
+-o scallop               Name of the binary
 
 If you want to add it to your command line, copy paste this into your .bashrc file (located in ~/)
 

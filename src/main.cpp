@@ -1,5 +1,6 @@
 #include "capstone/capstone.h"
 #include "asm_dump.hpp"
+#include "linux/elf.h"
 
 /**
  *  Scallop Shell
@@ -15,6 +16,7 @@
 int main(int argc, char *argv[])
 {
 
+    
     system("clear");
 
     char *programFilepath = makeFilepath(argv[1]);
