@@ -194,3 +194,87 @@ void printInstructions()
         
     }
 }
+
+void handleBacktrace()
+{
+    if (!strncmp(insn[0].mnemonic, "ret", 3))
+    {
+        backtrace.pop();
+    }
+    if (!strncmp(insn[0].mnemonic, "call", 4))
+    {
+        backtrace.push(insn[0].address);
+    }
+}
+
+bool moveOn()
+{
+    return (flags == CliFlags::contin);
+}
+
+int runFlags(int childPID)
+{
+    // Do flag operations
+    switch (flags)
+    {
+    case CliFlags::ni:
+        // If user wants to break at next instruction, break here
+        if (!runCliThisTick)
+        {
+            Cli(&flags);
+            return -1;
+        }
+        break;
+    case CliFlags::contin:
+        return -1;
+        break;
+    case CliFlags::printBack:
+        backtrace.printStack();
+        Cli(&flags);
+        break;
+
+    case CliFlags::breakpoint:
+
+        uint64_t addr;
+        char desc[30];
+        char save[10];
+
+        printf("\taddress  desc  saveToFile?  |  ");
+        scanf("%lx %30s %10s", &addr, desc, save);
+        clearLine();
+
+        symbolTable.emplace_back(Symbol(addr, desc, 'b'));
+
+        if (save[0] == 's')
+        {
+            FILE *symbolFile = fopen("ScallopSymbols.txt", "a");
+            fprintf(symbolFile, "0x%lx %s b\n", addr, desc);
+            fclose(symbolFile);
+        }
+
+        if (getchar() != EOF)
+            ; // Clears the newline out of the buffer,
+        // which prevents restarting of command
+
+        Cli(&flags);
+
+        break;
+    case CliFlags::starti:
+        // idk what to do here. restart the program but how?
+        break;
+    case CliFlags::clear:
+
+        system("clear");
+        Cli(&flags);
+
+        break;
+    case CliFlags::info:
+
+        std::cout << "Process ID = " << childPID << "\n";
+        Cli(&flags);
+
+        break;
+    }
+
+    return 0;
+}

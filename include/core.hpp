@@ -184,3 +184,10 @@ int hasLoopSymbol(uint64_t address);
 int hasInstrucBreak(char *instruction);
 
 bool isIgnored(std::vector<std::pair<uint64_t, uint64_t>> range, uint64_t addr);
+
+
+int filterLinuxInit(pid_t child);
+
+int filterLibC(pid_t child, int instructionsRun, bool started);
+
+void isInLibC(uint64_t rip);

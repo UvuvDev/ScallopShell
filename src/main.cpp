@@ -11,15 +11,10 @@
  *
  */
 
+void initializeSymbols(char* argv[]) {
 
-
-int main(int argc, char *argv[])
-{
-
-    
     system("clear");
 
-    char *programFilepath = makeFilepath(argv[1]);
     char *symbolsFilepath = makeFilepath(argv[2]);
 
     FILE *symbolFile = fopen(argv[2], "r");
@@ -58,9 +53,19 @@ int main(int argc, char *argv[])
 
     fclose(symbolFile);  
 
-    // Display read me
-    startupMsg();
+}
 
+
+int main(int argc, char *argv[])
+{
+
+    // Make the filepath for the program to debug
+    char *programFilepath = makeFilepath(argv[1]);
+
+    initializeSymbols(argv);
+
+    // Display read me, wait for user confirmation to start
+    startupMsg();
     std::cout << "Ready... ? " << "\n\n";
     getchar();
 

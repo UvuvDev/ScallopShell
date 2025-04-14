@@ -23,3 +23,9 @@ void printBreak(int symbolI);
 void printSymbol(int symbolI);
 void printBasic();
 void printInstructions();
+
+void handleBacktrace();
+
+bool moveOn();
+
+int runFlags(int childPID);

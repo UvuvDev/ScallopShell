@@ -98,3 +98,110 @@ bool isIgnored(std::vector<std::pair<uint64_t, uint64_t>> ranges, uint64_t addr)
     return false;
 }
 
+int filterLinuxInit(pid_t child)
+{
+    char cmd[100];
+    snprintf(cmd, 100, "cat /proc/%d/maps | grep \"ld-linux-x86-64.so\" ", child);
+    FILE *map = popen(cmd, "r"); // Run a command that finds all GLIBC refs in /proc/##/maps
+
+    {
+        uint64_t lowerLibCTemp;
+        uint64_t upperLibCTemp;
+        while (fscanf(map, "%lx-%lx%*[^\n]\n", &lowerLibCTemp, &upperLibCTemp) == 2)
+        {
+            ignoredFunctions.emplace_back(std::make_pair(lowerLibCTemp, upperLibCTemp));
+        }
+    }
+
+    fclose(map);
+
+    return 0;
+}
+
+int filterLibC(pid_t child, int instructionsRun, bool started)
+{
+    // Check to see if LibC has been loaded yet
+    if (instructionsRun % 100000 == 0 && !started)
+    {
+
+        /*== READ THE MEMORY MAP OF LIBC ==*/
+        char cmd[100];
+        snprintf(cmd, 100, "cat /proc/%d/maps | grep \"libc\" ", child);
+        FILE *map = popen(cmd, "r"); // Run a command that finds all GLIBC refs in /proc/##/maps
+
+        uint64_t lowerLibCTemp;
+        uint64_t upperLibCTemp;
+        uint64_t libcbase = UINT64_MAX;
+
+        while (fscanf(map, "%lx-%lx%*[^\n]\n", &lowerLibCTemp, &upperLibCTemp) == 2)
+        {
+            ignoredFunctions.emplace_back(std::make_pair(lowerLibCTemp, upperLibCTemp));
+
+            if (lowerLibCTemp < libcbase)
+                libcbase = lowerLibCTemp;
+        }
+
+        pclose(map);
+
+        /*== LOAD SYMBOL TABLE ==*/
+
+        // Load the symbol table of LibC
+        FILE *libc_symbols = popen("readelf -sW /lib/x86_64-linux-gnu/libc.so.6", "r");
+        if (libc_symbols == NULL)
+        {
+            return 1;
+        }
+
+        uint64_t libcaddr;
+        char symbolName[256]; // Make sure the array is large enough
+        char line[1024];
+        int header_found = 0;
+
+        // Process output line by line.
+        while (fgets(line, sizeof(line), libc_symbols) != NULL)
+        {
+            // Look for the header line that begins the symbol table entries.
+            if (!header_found)
+            {
+                if (strstr(line, "Num:") != NULL)
+                {
+                    header_found = 1; // Now the following lines are the entries.
+                }
+                continue; // Skip header lines.
+            }
+
+            if (sscanf(line, " %*d: %lx %*d %*s %*s %*s %*s %[^\n]", &libcaddr, symbolName) != 2)
+            {
+                continue;
+            }
+            // printf("Address: 0x%lx, Symbol: %s\n", libcaddr, symbolName);
+            // printf("%lx\n", libcbase);
+            symbolTable.emplace_back(Symbol(libcbase + libcaddr, symbolName, 's'));
+        }
+
+        pclose(libc_symbols);
+    }
+    return 0;
+}
+
+void isInLibC(uint64_t rip)
+{
+
+    int i = hasSymbol(rip);
+
+    if (i != -1)
+    {
+        if (symbolTable.at(i).getDesc().find("GLIBC") == std::string::npos &&
+            symbolTable.at(i).getDesc().find("glibc") == std::string::npos &&
+            symbolTable.at(i).getDesc().find("GNU") == std::string::npos)
+        {
+            return;
+        }
+        else
+        {
+            std::cout << BOLD_BLUE << "In GLIBC at " << symbolTable.at(i).getDesc()
+                      << "\n"
+                      << RESET;
+        }
+    }
+}
