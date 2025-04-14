@@ -420,7 +420,7 @@ int assemblyDump(pid_t child)
                 {
                     cs_free(insn, count);
                     spinner();
-                    isInLibC(regs.rip);
+                    if (started) isInLibC(regs.rip);
                     continue;
                 }
 
