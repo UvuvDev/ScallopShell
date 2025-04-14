@@ -206,7 +206,7 @@ int filterLibC(pid_t child, int instructionsRun)
         /*== LOAD SYMBOL TABLE ==*/
 
         // Load the symbol table of LibC
-        FILE *libc_symbols = popen("readelf -s /lib/x86_64-linux-gnu/libc.so.6", "r");
+        FILE *libc_symbols = popen("readelf -sW /lib/x86_64-linux-gnu/libc.so.6", "r");
         if (libc_symbols == NULL)
         {
             return 1;
