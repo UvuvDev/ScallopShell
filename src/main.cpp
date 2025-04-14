@@ -40,19 +40,23 @@ int main(int argc, char *argv[])
             uint64_t topAddrLoop; 
             int maxrun;
             fscanf(symbolFile, "%lx %d", &topAddrLoop, &maxrun);
-            memMaps.emplace_back(addr, topAddrLoop, desc, type, maxrun);
+            if (addr < topAddrLoop)
+                memMaps.emplace_back(addr, topAddrLoop, desc, type, maxrun);
+            else 
+                memMaps.emplace_back(topAddrLoop, addr, desc, type, maxrun);
             break;
         case 'm':
             uint64_t topAddrMap; 
             fscanf(symbolFile, "%lx", &topAddrMap);
-            memMaps.emplace_back(addr, topAddrMap, desc, type, -1);
+            if (addr < topAddrMap)
+                memMaps.emplace_back(addr, topAddrMap, desc, type, -1);
+            else 
+                memMaps.emplace_back(topAddrMap, addr, desc, type, -1);
             break;
         }
     }        
 
-    fclose(symbolFile);
-
-    
+    fclose(symbolFile);  
 
     // Display read me
     startupMsg();
