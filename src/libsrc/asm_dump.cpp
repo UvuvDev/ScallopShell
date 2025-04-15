@@ -236,7 +236,7 @@ int assemblyDump(pid_t child)
 
                 if (hasLoopSymbol(insn[0].address) == -1)
                 {
-                    while (!moveOn())
+                    while (true)
                     {
                         if (runFlags(child) == -1)
                             break;

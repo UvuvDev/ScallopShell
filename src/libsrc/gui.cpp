@@ -332,7 +332,11 @@ int runFlags(int childPID)
         if (!runCliThisTick)
         {
             Cli(&flags);
-            return -1;
+
+            if (moveOn() || flags == CliFlags::ni)
+                return -1;
+            else 
+                return 0;
         }
         break;
     case CliFlags::contin:
