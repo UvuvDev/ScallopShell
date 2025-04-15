@@ -400,6 +400,7 @@ int runFlags(int childPID)
         if (scanf("%llx", &address) != 1)
         {
             printf(RED "ERROR: Invalid input for address.\n\n\n" RESET);
+            while (getchar() != '\n');
             Cli(&flags);
             break;
         }
@@ -407,6 +408,7 @@ int runFlags(int childPID)
         if (address == 0)
         {
             printf(RED "ERROR: Invalid input for address.\n\n\n" RESET);
+            while (getchar() != '\n');
             Cli(&flags);
             break;
         }
@@ -426,6 +428,7 @@ int runFlags(int childPID)
             if (data == -1 && errno != 0)
             {
                 perror("ptrace(PTRACE_PEEKDATA) failed" RESET);
+                while (getchar() != '\n');
                 Cli(&flags);
                 break;
             }
