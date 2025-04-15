@@ -2,6 +2,7 @@
 #include "asm_dump.hpp"
 
 ExamineFlags xFlags;
+int bytesToExamine = 0;
 
 int Cli(CliFlags *flags)
 {
@@ -37,18 +38,13 @@ int Cli(CliFlags *flags)
         *flags = CliFlags::examine;
         xFlags = ExamineFlags::g;
 
-        int i = 0;
-        char flag = cmd[i];
+        char flag;
 
-        int ptrBytes = 8;
-
-        while (flag != ' ')
+        if (sscanf(&cmd[1], "/%d%c", &bytesToExamine, &flag) != -1)
         {
 
             switch (flag)
             {
-            case '/':
-                break;
             case 'g':
                 xFlags = ExamineFlags::g;
                 break;
@@ -63,8 +59,6 @@ int Cli(CliFlags *flags)
                 break;
             }
 
-            i++;
-            flag = cmd[i];
         }
 
         return 1;
@@ -401,7 +395,7 @@ int runFlags(int childPID)
     case CliFlags::examine:
 
         uint64_t address = 0;
-        printf(BOLD_BLUE "\tEnter address in hex: ");
+        printf(BOLD_BLUE "\tEnter address in hex: " RESET);
 
         if (scanf("%llx", &address) != 1)
         {
@@ -419,10 +413,10 @@ int runFlags(int childPID)
 
         // xFlags is assumed to be a variable holding number of bytes to read (1,2,4, or 8).
         // For demonstration, let’s assume xFlags is defined, or hardcode it:
-        int bytesToRead = (int)xFlags; // Change this as needed, or set from xFlags.
+        int bytesToRead = (int)xFlags * bytesToExamine; // Change this as needed, or set from xFlags.
         int offset = 0;
 
-        printf(BOLD_CYAN  "\t\tData at 0x%llx: ", address);
+        printf(BOLD_CYAN  "\n\t\tData at 0x%llx: ", address);
 
         while (offset < bytesToRead)
         {
