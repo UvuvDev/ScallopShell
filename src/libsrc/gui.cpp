@@ -7,11 +7,11 @@ int bytesToExamine = 0;
 int Cli(CliFlags *flags)
 {
 
-    char cmd[20];
+    char cmd[100];
     printf(" > ");
     int ch;
 
-    fgets(cmd, 20, stdin);
+    fgets(cmd, 100, stdin);
     clearLine();
 
     if (!strncmp(cmd, "\n", 1))
@@ -425,7 +425,7 @@ int runFlags(int childPID)
             long data = ptrace(PTRACE_PEEKDATA, child, (void *)(address + offset), 0);
             if (data == -1 && errno != 0)
             {
-                perror("ptrace(PTRACE_PEEKDATA) failed");
+                perror("ptrace(PTRACE_PEEKDATA) failed" RESET);
                 Cli(&flags);
                 break;
             }
