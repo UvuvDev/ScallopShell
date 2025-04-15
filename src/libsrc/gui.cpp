@@ -1,6 +1,8 @@
 #include "gui.hpp"
 #include "asm_dump.hpp"
 
+ExamineFlags xFlags;
+
 int Cli(CliFlags *flags)
 {
 
@@ -28,6 +30,43 @@ int Cli(CliFlags *flags)
     if (!strncmp(cmd, "reg", 3))
     {
         *flags = CliFlags::regV;
+        return 1;
+    }
+    if (!strncmp(cmd, "x", 1))
+    {
+        *flags = CliFlags::examine;
+        xFlags = ExamineFlags::g;
+        
+        int i = 0;
+        char flag = cmd[i];
+
+        int ptrBytes = 8;
+
+        while (flag != ' ')
+        {
+
+            switch (flag)
+            {
+            case '/':
+                break;
+            case 'g':
+                xFlags = ExamineFlags::g;
+                break;
+            case 'w':
+                xFlags = ExamineFlags::w;
+                break;
+            case 'h':
+                xFlags = ExamineFlags::h;
+                break;
+            case 'b':
+                xFlags = ExamineFlags::b;
+                break;
+            }
+
+            i++;
+            flag = cmd[i];
+        }
+
         return 1;
     }
     if (!strncmp(cmd, "flag", 4))
@@ -205,19 +244,29 @@ void printInstructions()
     }
 }
 
-void printEFlags(uint64_t eflags) {
+void printEFlags(uint64_t eflags)
+{
     // Only the lower 32 bits of EFLAGS are meaningful.
     printf(BOLD_AMBER " SET FLAGS - ");
-    
-    if (eflags & (1ULL << 0))  printf("CF ");   // Carry Flag
-    if (eflags & (1ULL << 2))  printf("PF ");   // Parity Flag
-    if (eflags & (1ULL << 4))  printf("AF ");   // Auxiliary carry flag
-    if (eflags & (1ULL << 6))  printf("ZF ");   // Zero Flag
-    if (eflags & (1ULL << 7))  printf("SF ");   // Sign Flag
-    if (eflags & (1ULL << 8))  printf("TF ");   // Trap Flag
-    if (eflags & (1ULL << 9))  printf("IF ");   // Interrupt Enable Flag
-    if (eflags & (1ULL << 10)) printf("DF ");   // Direction Flag
-    if (eflags & (1ULL << 11)) printf("OF ");   // Overflow Flag
+
+    if (eflags & (1ULL << 0))
+        printf("CF "); // Carry Flag
+    if (eflags & (1ULL << 2))
+        printf("PF "); // Parity Flag
+    if (eflags & (1ULL << 4))
+        printf("AF "); // Auxiliary carry flag
+    if (eflags & (1ULL << 6))
+        printf("ZF "); // Zero Flag
+    if (eflags & (1ULL << 7))
+        printf("SF "); // Sign Flag
+    if (eflags & (1ULL << 8))
+        printf("TF "); // Trap Flag
+    if (eflags & (1ULL << 9))
+        printf("IF "); // Interrupt Enable Flag
+    if (eflags & (1ULL << 10))
+        printf("DF "); // Direction Flag
+    if (eflags & (1ULL << 11))
+        printf("OF "); // Overflow Flag
 
     printf(RESET "\n");
 }
@@ -257,7 +306,7 @@ void printRegVerbose()
     printf(BOLD_CYAN "%-8s = 0x%016llx\n" RESET, "$EFLAGS", regs.eflags);
 
     printEFlags(regs.eflags);
-    
+
     // Print a decorative line footer
     printf(BOLD_BLACK "#---------------------------------------------------------------------------------------------------------------------------------#\n" RESET);
 }
@@ -347,6 +396,66 @@ int runFlags(int childPID)
         break;
     case CliFlags::pFlags:
         printEFlags(regs.eflags);
+        Cli(&flags);
+        break;
+    case CliFlags::examine:
+
+        uint64_t address = 0;
+        printf("Enter address in hex: ");
+
+        while (getchar() != '\n');
+        
+        if (scanf("%llx", &address) != 1)
+        {
+            printf(RED "ERROR: Invalid input for address.\n\n\n" RESET);
+            Cli(&flags);
+            break;
+        }
+
+        if (address == 0)
+        {
+            printf(RED "ERROR: Invalid input for address.\n\n\n" RESET);
+            Cli(&flags);
+            break;
+        }
+
+        // xFlags is assumed to be a variable holding number of bytes to read (1,2,4, or 8).
+        // For demonstration, let’s assume xFlags is defined, or hardcode it:
+        int bytesToRead = 8; // Change this as needed, or set from xFlags.
+        int offset = 0;
+
+        printf("Data at 0x%llx: ", address);
+
+        while (offset < bytesToRead)
+        {
+            errno = 0; // Clear errno before ptrace call.
+            // Read one word (typically 8 bytes) from the target's address space.
+            long data = ptrace(PTRACE_PEEKDATA, child, (void *)(address + offset), 0);
+            if (data == -1 && errno != 0)
+            {
+                perror("ptrace(PTRACE_PEEKDATA) failed");
+                Cli(&flags);
+                break;
+            }
+
+            // Determine how many bytes to print from this word.
+            int bytesThisWord = sizeof(long);
+            if (offset + bytesThisWord > bytesToRead)
+                bytesThisWord = bytesToRead - offset;
+
+            // Print each byte from the word in little-endian order.
+            for (int j = 0; j < bytesThisWord; j++)
+            {
+                uint8_t byte = (data >> (8 * j)) & 0xFF;
+                printf("%02x ", byte);
+            }
+
+            offset += sizeof(long);
+        }
+        printf("\n");
+
+        while (getchar() != '\n');
+        
         Cli(&flags);
         break;
     }

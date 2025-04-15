@@ -2,6 +2,8 @@
 #include "asm_dump.hpp"
 #include "linux/elf.h"
 
+pid_t child; 
+
 /**
  *  Scallop Shell
  *      Bradley Fernandez 2025
@@ -70,7 +72,7 @@ int main(int argc, char *argv[])
     getchar();
 
     /* When all pre processing is done, fork. */
-    pid_t child = fork();
+    child = fork();
     // If child process...
     if (child == 0)
     {

@@ -161,6 +161,7 @@ extern std::vector<Symbol> symbolTable;
 //
 extern std::vector<MemMap> memMaps;
 extern struct user_regs_struct regs;
+extern pid_t child;
 
 /*================================*/
 

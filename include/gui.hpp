@@ -14,8 +14,18 @@ enum class CliFlags {
     info = 8,
     regV = 9,
     regC = 10,
-    pFlags = 11
+    pFlags = 11,
+    examine = 12
 };
+
+enum class ExamineFlags {
+    b = 1,
+    h = 2, 
+    w = 4, 
+    g = 8
+};
+
+extern ExamineFlags xFlags;
 
 int Cli(CliFlags* flags);
 void spinner();
