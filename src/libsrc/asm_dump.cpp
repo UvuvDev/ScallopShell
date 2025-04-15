@@ -8,6 +8,7 @@ cs_insn *insn;
 AddressStack backtrace;
 std::shared_ptr<LinkedList> jumpTable;
 
+struct user_regs_struct regs;
 CliFlags flags;
 bool runCliThisTick = false;
 bool started = false;
@@ -116,7 +117,6 @@ int assemblyDump(pid_t child)
 
     // Parent process: wait for the child to stop.
     int status;
-    struct user_regs_struct regs;
     csh handle;
 
     // If disassembler fails to open, break
@@ -125,6 +125,7 @@ int assemblyDump(pid_t child)
 
     waitpid(child, &status, 0); // Stop the child process until we start it again
 
+    
     if (WIFSTOPPED(status))
     {
         std::cout << "Child stopped, now continuing execution." << std::endl;

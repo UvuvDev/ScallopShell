@@ -40,6 +40,11 @@
 #define BOLD_MAGENTA "\033[1;35m"
 #define BOLD_CYAN "\033[1;36m"
 #define BOLD_WHITE "\033[1;37m"
+#define BOLD_CRIMSON    "\033[38;5;160m"  // A deep red (crimson)
+#define BOLD_FIREBRICK  "\033[38;5;124m"  // Another intense deep red (firebrick)
+#define BOLD_TANGERINE  "\033[38;5;214m"  // A bright, vibrant orange (tangerine)
+#define BOLD_AMBER      "\033[38;5;220m"  // A warm amber (yellow-orange)
+#define BOLD_GOLD       "\033[38;5;178m"  // A soft, warm golden yellow
 
 // Underline Colors
 #define UNDERLINE_BLACK "\033[4;30m"
@@ -155,6 +160,7 @@ extern std::vector<std::pair<uint64_t, uint64_t>> ignoredFunctions;
 extern std::vector<Symbol> symbolTable;
 //
 extern std::vector<MemMap> memMaps;
+extern struct user_regs_struct regs;
 
 /*================================*/
 

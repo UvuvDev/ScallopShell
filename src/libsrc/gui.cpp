@@ -1,7 +1,7 @@
 #include "gui.hpp"
 #include "asm_dump.hpp"
 
-int Cli(CliFlags* flags)
+int Cli(CliFlags *flags)
 {
 
     char cmd[20];
@@ -11,7 +11,8 @@ int Cli(CliFlags* flags)
     fgets(cmd, 20, stdin);
     clearLine();
 
-    if (!strncmp(cmd, "\n", 1)) {
+    if (!strncmp(cmd, "\n", 1))
+    {
         return 2;
     }
     if (!strncmp(cmd, "back", 4))
@@ -22,6 +23,16 @@ int Cli(CliFlags* flags)
     if (!strncmp(cmd, "ni", 2))
     {
         *flags = CliFlags::ni;
+        return 1;
+    }
+    if (!strncmp(cmd, "reg", 3))
+    {
+        *flags = CliFlags::regV;
+        return 1;
+    }
+    if (!strncmp(cmd, "flag", 4))
+    {
+        *flags = CliFlags::pFlags;
         return 1;
     }
     if (!strncmp(cmd, "b", 1))
@@ -59,8 +70,7 @@ int Cli(CliFlags* flags)
         printf("Exiting Scallop Shell....\n");
         exit(1);
     }
-    
-    
+
     return 0;
 }
 
@@ -71,21 +81,21 @@ void spinner()
 
     static constexpr int delay = 10000;
 
-    switch (x % (4*delay))
+    switch (x % (4 * delay))
     {
     case 0:
         printf("\b|");
         fflush(stdout);
         break;
-    case 1*delay:
+    case 1 * delay:
         printf("\b/");
         fflush(stdout);
         break;
-    case 2*delay:
+    case 2 * delay:
         printf("\b-");
         fflush(stdout);
         break;
-    case 3*delay:
+    case 3 * delay:
         printf("\b\\");
         fflush(stdout);
         break;
@@ -95,12 +105,12 @@ void spinner()
     x++;
 }
 
-void clearLine() {
+void clearLine()
+{
     // Move the cursor up one line and clear that line:
-    printf("\033[1A");  // Move up one line
-    printf("\033[K");   // Clear from cursor to end of line
+    printf("\033[1A"); // Move up one line
+    printf("\033[K");  // Clear from cursor to end of line
 }
-
 
 void printMemMap(int index)
 {
@@ -157,11 +167,12 @@ void printSymbol(int symbolI)
     std::cout << BOLD_MAGENTA << "  " << symbolTable.at(symbolI).getAddr() << ": " << insn[0].mnemonic << "\t\t" << insn[0].op_str << " |\t<- " << symbolTable.at(symbolI).getDesc() << RESET << "\n";
 }
 
-void printBasic() {
+void printBasic()
+{
     // Print the instruction address, instruction and arguments
     std::cout << YELLOW << (uint64_t *)insn[0].address << ":\t" << BLUE
-    << insn[0].mnemonic << "\t\t" << MAGENTA << insn[0].op_str << "\n"
-    << RESET;
+              << insn[0].mnemonic << "\t\t" << MAGENTA << insn[0].op_str << "\n"
+              << RESET;
 }
 
 void printInstructions()
@@ -191,8 +202,64 @@ void printInstructions()
 
         printBreak(symbolI);
         printBasic();
-        
     }
+}
+
+void printEFlags(uint64_t eflags) {
+    // Only the lower 32 bits of EFLAGS are meaningful.
+    printf(BOLD_AMBER " SET FLAGS - ");
+    
+    if (eflags & (1ULL << 0))  printf("CF ");   // Carry Flag
+    if (eflags & (1ULL << 2))  printf("PF ");   // Parity Flag
+    if (eflags & (1ULL << 4))  printf("AF ");   // Auxiliary carry flag
+    if (eflags & (1ULL << 6))  printf("ZF ");   // Zero Flag
+    if (eflags & (1ULL << 7))  printf("SF ");   // Sign Flag
+    if (eflags & (1ULL << 8))  printf("TF ");   // Trap Flag
+    if (eflags & (1ULL << 9))  printf("IF ");   // Interrupt Enable Flag
+    if (eflags & (1ULL << 10)) printf("DF ");   // Direction Flag
+    if (eflags & (1ULL << 11)) printf("OF ");   // Overflow Flag
+
+    printf(RESET "\n");
+}
+
+void printRegVerbose()
+{
+
+    // Print a decorative line header
+    printf(BOLD_BLACK "#------------------------------------------------------------- REGISTERS ---------------------------------------------------------#\n" RESET);
+
+    // Row 1
+    printf(BOLD_GREEN "%-8s = 0x%016llx   " RESET, " $RAX", regs.rax);
+    printf(BOLD_CYAN "%-8s = 0x%016llx   " RESET, "$RBX", regs.rbx);
+    printf(BOLD_BLUE "%-8s = 0x%016llx   " RESET, "$RCX", regs.rcx);
+    printf(BOLD_MAGENTA "%-8s = 0x%016llx\n" RESET, "$RDX", regs.rdx);
+
+    // Row 2
+    printf(BOLD_GREEN "%-8s = 0x%016llx   " RESET, " $RDI", regs.rdi);
+    printf(BOLD_CYAN "%-8s = 0x%016llx   " RESET, "$RSI", regs.rsi);
+    printf(BOLD_BLUE "%-8s = 0x%016llx   " RESET, "$RBP", regs.rbp);
+    printf(BOLD_MAGENTA "%-8s = 0x%016llx\n" RESET, "$RSP", regs.rsp);
+
+    // Row 3
+    printf(BOLD_GREEN "%-8s = 0x%016llx   " RESET, " $RIP", regs.rip);
+    printf(BOLD_CYAN "%-8s = 0x%016llx   " RESET, "$R8", regs.r8);
+    printf(BOLD_BLUE "%-8s = 0x%016llx   " RESET, "$R9", regs.r9);
+    printf(BOLD_MAGENTA "%-8s = 0x%016llx\n" RESET, "$R10", regs.r10);
+
+    // Row 4
+    printf(BOLD_GREEN "%-8s = 0x%016llx   " RESET, " $R11", regs.r11);
+    printf(BOLD_CYAN "%-8s = 0x%016llx   " RESET, "$R12", regs.r12);
+    printf(BOLD_BLUE "%-8s = 0x%016llx   " RESET, "$R13", regs.r13);
+    printf(BOLD_MAGENTA "%-8s = 0x%016llx\n" RESET, "$R14", regs.r14);
+
+    // Row 5
+    printf(BOLD_GREEN "%-8s = 0x%016llx   " RESET, " $R15", regs.r15);
+    printf(BOLD_CYAN "%-8s = 0x%016llx\n" RESET, "$EFLAGS", regs.eflags);
+
+    printEFlags(regs.eflags);
+    
+    // Print a decorative line footer
+    printf(BOLD_BLACK "#---------------------------------------------------------------------------------------------------------------------------------#\n" RESET);
 }
 
 void handleBacktrace()
@@ -273,6 +340,14 @@ int runFlags(int childPID)
         std::cout << "Process ID = " << childPID << "\n";
         Cli(&flags);
 
+        break;
+    case CliFlags::regV:
+        printRegVerbose();
+        Cli(&flags);
+        break;
+    case CliFlags::pFlags:
+        printEFlags(regs.eflags);
+        Cli(&flags);
         break;
     }
 

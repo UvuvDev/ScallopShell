@@ -1,5 +1,6 @@
 #pragma once
 #include "core.hpp"
+#include <iomanip>
 
 enum class CliFlags {
     def = 0,
@@ -10,7 +11,10 @@ enum class CliFlags {
     lay = 5,
     starti = 6,
     clear = 7,
-    info = 8
+    info = 8,
+    regV = 9,
+    regC = 10,
+    pFlags = 11
 };
 
 int Cli(CliFlags* flags);
@@ -23,6 +27,10 @@ void printBreak(int symbolI);
 void printSymbol(int symbolI);
 void printBasic();
 void printInstructions();
+
+void printRegVerbose(user_regs_struct* regs);
+
+void examineReg(user_regs_struct* regs, std::string& userInput);
 
 void handleBacktrace();
 

@@ -69,3 +69,7 @@ Special cases are for "m" and "l", they have extra arguments.
 ## LibC printing
 
 Scallop Shell will tell you when $RIP is equal to a symbol from LibC and will tell you what that symbol is. This is very useful for readability. *Be aware that malware will often jump a few instructions ahead of the target symbol. If you believe it's doing this, you will have to run through LibC itself by commenting the continue statement in asm_dump.cpp through source code modification.* 
+
+## Debugging
+
+Use memory maps, breakpoints, and symbols, and also use the "reg" and "flag" commands to print the values of registers and the flags.
