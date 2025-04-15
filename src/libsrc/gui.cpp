@@ -36,7 +36,7 @@ int Cli(CliFlags *flags)
     {
         *flags = CliFlags::examine;
         xFlags = ExamineFlags::g;
-        
+
         int i = 0;
         char flag = cmd[i];
 
@@ -401,10 +401,8 @@ int runFlags(int childPID)
     case CliFlags::examine:
 
         uint64_t address = 0;
-        printf("Enter address in hex: ");
+        printf(BOLD_BLUE "\tEnter address in hex: ");
 
-        while (getchar() != '\n');
-        
         if (scanf("%llx", &address) != 1)
         {
             printf(RED "ERROR: Invalid input for address.\n\n\n" RESET);
@@ -421,10 +419,10 @@ int runFlags(int childPID)
 
         // xFlags is assumed to be a variable holding number of bytes to read (1,2,4, or 8).
         // For demonstration, let’s assume xFlags is defined, or hardcode it:
-        int bytesToRead = 8; // Change this as needed, or set from xFlags.
+        int bytesToRead = (int)xFlags; // Change this as needed, or set from xFlags.
         int offset = 0;
 
-        printf("Data at 0x%llx: ", address);
+        printf(BOLD_CYAN  "\t\tData at 0x%llx: ", address);
 
         while (offset < bytesToRead)
         {
@@ -452,7 +450,7 @@ int runFlags(int childPID)
 
             offset += sizeof(long);
         }
-        printf("\n");
+        printf(RESET "\n");
 
         while (getchar() != '\n');
         
