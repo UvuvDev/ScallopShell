@@ -139,7 +139,7 @@ int assemblyDump(pid_t child)
         uint64_t lastBack = backtrace.top();
         flags = CliFlags::ni;
 
-        FILE* asmDump = initFile("sus.as");
+        FILE* asmDump = initFile("sus.s");
 
         // While the program is running
         while (true)
