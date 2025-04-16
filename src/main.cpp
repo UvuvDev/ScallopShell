@@ -62,15 +62,19 @@ void initializeSymbols(char *argv[])
 int main(int argc, char *argv[])
 {
 
+    if (argc != 3) {
+        // Display read me, wait for user confirmation to start
+        startupMsg();
+
+        printf(BOLD_RED "ERROR: SHOULD HAVE 2 ARGUMENTS, HAS %d. \n\n", argc-1);
+
+        return 1;
+    }
+
     // Make the filepath for the program to debug
     char *programFilepath = makeFilepath(argv[1]);
 
     initializeSymbols(argv);
-
-    // Display read me, wait for user confirmation to start
-    startupMsg();
-    std::cout << "Ready... ? " << "\n\n";
-    getchar();
 
     /* When all pre processing is done, fork. */
     child = fork();
