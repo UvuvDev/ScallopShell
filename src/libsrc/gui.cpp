@@ -1,5 +1,5 @@
 #include "gui.hpp"
-#include "asm_dump.hpp"
+#include "loop.hpp"
 
 ExamineFlags xFlags;
 int bytesToExamine = 0;

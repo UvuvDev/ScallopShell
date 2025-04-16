@@ -12,6 +12,7 @@ Current Functionality:
 - Breakpoints
 - GDB-like CLI
 - Backtracing
+- Assembly dumping into a file
 
 Features in Development:
 
