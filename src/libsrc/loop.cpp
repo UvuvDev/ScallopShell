@@ -137,6 +137,7 @@ int assemblyDump(pid_t child)
         int instructionsRun = 0;
         uint64_t lastBack = backtrace.top();
         flags = CliFlags::ni;
+        bool wasInLIBCLastInsn = false;
 
         FILE* asmDump = initFile("sus.s");
 
@@ -170,11 +171,13 @@ int assemblyDump(pid_t child)
                 {
                     cs_free(insn, count);
                     spinner();
-                    if (started)
+                    if (started && !wasInLIBCLastInsn)
                         isInLibC(regs.rip);
+                    wasInLIBCLastInsn = true;                    
                     continue;
                 }
 
+                wasInLIBCLastInsn = false;
                 started = true;
 
                 /*uint64_t jmpAddr;
