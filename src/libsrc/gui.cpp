@@ -186,7 +186,7 @@ void printBreak(int symbolI)
     if (symbolI != -1)
     {
         // Print the modified instruction with symbols
-        std::cout << BOLD_BLUE << "  " << symbolTable.at(symbolI).getAddr() << ": " << insn[0].mnemonic << "\t\t" << insn[0].op_str << " |\t<- " << symbolTable.at(symbolI).getDesc() << RESET << "\n";
+        std::cout << BOLD_RED << "  " << symbolTable.at(symbolI).getAddr() << ": " << insn[0].mnemonic << "\t\t" << insn[0].op_str << " |\t<- " << symbolTable.at(symbolI).getDesc() << RESET << "\n";
         Cli(&flags);
         runCliThisTick = true;
     }
@@ -250,7 +250,7 @@ void printInstructions()
 void printEFlags(uint64_t eflags)
 {
     // Only the lower 32 bits of EFLAGS are meaningful.
-    printf(BOLD_AMBER " SET FLAGS - ");
+    printf(BOLD_AMBER "  SET FLAGS - ");
 
     if (eflags & (1ULL << 0))
         printf("CF "); // Carry Flag
@@ -278,40 +278,40 @@ void printRegVerbose()
 {
 
     // Print a decorative line header
-    printf(BOLD_BLACK "#------------------------------------------------------------- REGISTERS ---------------------------------------------------------#\n" RESET);
+    printf(BOLD_BLACK "#--------------------------------------------------------- REGISTERS ---------------------------------------------------------#\n" RESET);
 
     // Row 1
-    printf(BOLD_GREEN "%-8s = 0x%016llx   " RESET, " $RAX", regs.rax);
+    printf(BOLD_GREEN "%-8s = 0x%016llx   " RESET, "  $RAX", regs.rax);
     printf(BOLD_CYAN "%-8s = 0x%016llx   " RESET, "$RBX", regs.rbx);
     printf(BOLD_BLUE "%-8s = 0x%016llx   " RESET, "$RCX", regs.rcx);
     printf(BOLD_MAGENTA "%-8s = 0x%016llx\n" RESET, "$RDX", regs.rdx);
 
     // Row 2
-    printf(BOLD_GREEN "%-8s = 0x%016llx   " RESET, " $RDI", regs.rdi);
+    printf(BOLD_GREEN "%-8s = 0x%016llx   " RESET, "  $RDI", regs.rdi);
     printf(BOLD_CYAN "%-8s = 0x%016llx   " RESET, "$RSI", regs.rsi);
     printf(BOLD_BLUE "%-8s = 0x%016llx   " RESET, "$RBP", regs.rbp);
     printf(BOLD_MAGENTA "%-8s = 0x%016llx\n" RESET, "$RSP", regs.rsp);
 
     // Row 3
-    printf(BOLD_GREEN "%-8s = 0x%016llx   " RESET, " $RIP", regs.rip);
+    printf(BOLD_GREEN "%-8s = 0x%016llx   " RESET, "  $RIP", regs.rip);
     printf(BOLD_CYAN "%-8s = 0x%016llx   " RESET, "$R8", regs.r8);
     printf(BOLD_BLUE "%-8s = 0x%016llx   " RESET, "$R9", regs.r9);
     printf(BOLD_MAGENTA "%-8s = 0x%016llx\n" RESET, "$R10", regs.r10);
 
     // Row 4
-    printf(BOLD_GREEN "%-8s = 0x%016llx   " RESET, " $R11", regs.r11);
+    printf(BOLD_GREEN "%-8s = 0x%016llx   " RESET, "  $R11", regs.r11);
     printf(BOLD_CYAN "%-8s = 0x%016llx   " RESET, "$R12", regs.r12);
     printf(BOLD_BLUE "%-8s = 0x%016llx   " RESET, "$R13", regs.r13);
     printf(BOLD_MAGENTA "%-8s = 0x%016llx\n" RESET, "$R14", regs.r14);
 
     // Row 5
-    printf(BOLD_GREEN "%-8s = 0x%016llx   " RESET, " $R15", regs.r15);
+    printf(BOLD_GREEN "%-8s = 0x%016llx   " RESET, "  $R15", regs.r15);
     printf(BOLD_CYAN "%-8s = 0x%016llx\n" RESET, "$EFLAGS", regs.eflags);
 
     printEFlags(regs.eflags);
 
     // Print a decorative line footer
-    printf(BOLD_BLACK "#---------------------------------------------------------------------------------------------------------------------------------#\n" RESET);
+    printf(BOLD_BLACK "#-----------------------------------------------------------------------------------------------------------------------------#\n" RESET);
 }
 
 void handleBacktrace()
@@ -370,7 +370,7 @@ int runFlags(int childPID)
 
         if (save[0] == 's')
         {
-            FILE *symbolFile = fopen("ScallopSymbols.txt", "a");
+            FILE *symbolFile = fopen("info.txt", "a");
             fprintf(symbolFile, "0x%lx %s b\n", addr, desc);
             fclose(symbolFile);
         }
@@ -439,7 +439,7 @@ int runFlags(int childPID)
         int bytesToRead = (int)xFlags * bytesToExamine; // Change this as needed, or set from xFlags.
         int offset = 0;
 
-        printf(BOLD_CYAN  "\n\t\tData at 0x%llx: ", address);
+        printf(BOLD_CYAN  "\n\t\tData at 0x%lx: ", address);
 
         while (offset < bytesToRead)
         {

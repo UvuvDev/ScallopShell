@@ -139,7 +139,7 @@ int assemblyDump(pid_t child)
         flags = CliFlags::ni;
         bool wasInLIBCLastInsn = false;
 
-        FILE* asmDump = initFile("sus.s");
+        FILE* asmDump = initFile("prog_asm.s");
 
         // While the program is running
         while (true)

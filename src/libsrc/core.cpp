@@ -200,7 +200,7 @@ void isInLibC(uint64_t rip)
         else
         {
             if (printGLIBC) {
-            std::cout << BOLD_BLUE << "In GLIBC at " << symbolTable.at(i).getDesc()
+            std::cout << BOLD_BLUE << " In GLIBC at " << symbolTable.at(i).getDesc()
                       << "\n"
                       << RESET;
             }

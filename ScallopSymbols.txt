@@ -1,4 +1,1 @@
-0x555555555040 printf b
-0x555555555040 printf b
-0xf0 rizz b
-0xf0 llll b
+
