@@ -3,6 +3,7 @@
 
 ExamineFlags xFlags;
 int bytesToExamine = 0;
+bool printGLIBC = true;
 
 int Cli(CliFlags *flags)
 {
@@ -67,6 +68,14 @@ int Cli(CliFlags *flags)
     {
         *flags = CliFlags::pFlags;
         return 1;
+    }
+    if (!strncmp(cmd, "libc on", 7))
+    {
+        *flags = CliFlags::startGLIBCprints;
+    }
+    if (!strncmp(cmd, "libc off", 8))
+    {
+        *flags = CliFlags::stopGLIBCprints;
     }
     if (!strncmp(cmd, "b", 1))
     {
@@ -394,6 +403,14 @@ int runFlags(int childPID)
         break;
     case CliFlags::pFlags:
         printEFlags(regs.eflags);
+        Cli(&flags);
+        break;
+    case CliFlags::startGLIBCprints:
+        printGLIBC = true;
+        Cli(&flags);
+        break;
+    case CliFlags::stopGLIBCprints:
+        printGLIBC = false;
         Cli(&flags);
         break;
     case CliFlags::examine:

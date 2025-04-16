@@ -14,7 +14,6 @@ CliFlags flags;
 bool runCliThisTick = false;
 bool started = false;
 
-
 size_t disassemble(pid_t child, struct user_regs_struct *regs,
                    csh *handle, int *status, int *paddingLen,
                    bool run = true, cs_insn **insnArg = nullptr)

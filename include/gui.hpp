@@ -15,7 +15,9 @@ enum class CliFlags {
     regV = 9,
     regC = 10,
     pFlags = 11,
-    examine = 12
+    examine = 12,
+    stopGLIBCprints = 13,
+    startGLIBCprints = 14
 };
 
 enum class ExamineFlags {
@@ -26,6 +28,7 @@ enum class ExamineFlags {
 };
 
 extern ExamineFlags xFlags;
+
 
 int Cli(CliFlags* flags);
 void spinner();
