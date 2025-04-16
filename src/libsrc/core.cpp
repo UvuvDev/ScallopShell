@@ -48,7 +48,8 @@ void startupMsg()
     file.close(); // Close the file.
 }
 
-char* makeFilepath(char* argv) {
+char *makeFilepath(char *argv)
+{
     // Make a string with "./" prefixed
     char *filePathDotSlash = (char *)malloc(strlen(argv) * sizeof(char) + 2);
     filePathDotSlash[0] = '.';
@@ -58,42 +59,49 @@ char* makeFilepath(char* argv) {
         filePathDotSlash[i + 2] = argv[i];
 
     return filePathDotSlash;
-    
 }
 
-int hasSymbol(uint64_t address) {
+int hasSymbol(uint64_t address)
+{
 
-    for (int i = 0; i < symbolTable.size(); i++) {
-        if ((uint64_t)symbolTable.at(i).getAddr() == address) return i;
+    for (int i = 0; i < symbolTable.size(); i++)
+    {
+        if ((uint64_t)symbolTable.at(i).getAddr() == address)
+            return i;
     }
     return -1;
-
 }
 
-int hasLoopSymbol(uint64_t address) {
+int hasLoopSymbol(uint64_t address)
+{
 
-    for (int i = 0; i < memMaps.size(); i++) {
-        if (memMaps.at(i).bottomAddr <= address && memMaps.at(i).topAddr >= address) return i;
+    for (int i = 0; i < memMaps.size(); i++)
+    {
+        if (memMaps.at(i).bottomAddr <= address && memMaps.at(i).topAddr >= address)
+            return i;
     }
     return -1;
-
 }
 
-int hasInstrucBreak(char* instruction) {
+int hasInstrucBreak(char *instruction)
+{
 
-    for (int i = 0; i < symbolTable.size(); i++) {
-        if (!strcmp(symbolTable.at(i).getDesc().c_str(), instruction)) return 1;
+    for (int i = 0; i < symbolTable.size(); i++)
+    {
+        if (!strcmp(symbolTable.at(i).getDesc().c_str(), instruction))
+            return 1;
     }
     return -1;
-
 }
-
 
 // Returns true if the given address is within libc.
-bool isIgnored(std::vector<std::pair<uint64_t, uint64_t>> ranges, uint64_t addr) {
-    
-    for (auto& i : ranges) {
-        if (i.first <= addr && i.second >= addr) return true;
+bool isIgnored(std::vector<std::pair<uint64_t, uint64_t>> ranges, uint64_t addr)
+{
+
+    for (auto &i : ranges)
+    {
+        if (i.first <= addr && i.second >= addr)
+            return true;
     }
     return false;
 }
@@ -199,10 +207,11 @@ void isInLibC(uint64_t rip)
         }
         else
         {
-            if (printGLIBC) {
-            std::cout << BOLD_BLUE << " In GLIBC at " << symbolTable.at(i).getDesc()
-                      << "\n"
-                      << RESET;
+            if (printGLIBC)
+            {
+                std::cout << BOLD_BLUE << " In GLIBC at " << symbolTable.at(i).getDesc()
+                          << RESET
+                          << "\n";
             }
         }
     }

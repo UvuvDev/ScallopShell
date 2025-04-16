@@ -59,7 +59,6 @@ int Cli(CliFlags *flags)
                 xFlags = ExamineFlags::b;
                 break;
             }
-
         }
 
         return 1;
@@ -204,7 +203,7 @@ void printBreak(int symbolI)
 void printSymbol(int symbolI)
 {
     // Print the modified instruction with symbols
-    std::cout << BOLD_MAGENTA << "  " << symbolTable.at(symbolI).getAddr() << ": " << insn[0].mnemonic << "\t\t" << insn[0].op_str << " |\t<- " << symbolTable.at(symbolI).getDesc() << RESET << "\n";
+    std::cout << BOLD_CYAN << "  " << symbolTable.at(symbolI).getAddr() << ": " << insn[0].mnemonic << "\t\t" << insn[0].op_str << " |\t<- " << symbolTable.at(symbolI).getDesc() << RESET << "\n";
 }
 
 void printBasic()
@@ -342,7 +341,7 @@ int runFlags(int childPID)
 
             if (moveOn() || flags == CliFlags::ni)
                 return -1;
-            else 
+            else
                 return 0;
         }
         break;
@@ -419,7 +418,8 @@ int runFlags(int childPID)
         if (scanf("%llx", &address) != 1)
         {
             printf(RED "ERROR: Invalid input for address.\n\n\n" RESET);
-            while (getchar() != '\n');
+            while (getchar() != '\n')
+                ;
             Cli(&flags);
             break;
         }
@@ -427,7 +427,8 @@ int runFlags(int childPID)
         if (address == 0)
         {
             printf(RED "ERROR: Invalid input for address.\n\n\n" RESET);
-            while (getchar() != '\n');
+            while (getchar() != '\n')
+                ;
             Cli(&flags);
             break;
         }
@@ -437,7 +438,7 @@ int runFlags(int childPID)
         int bytesToRead = (int)xFlags * bytesToExamine; // Change this as needed, or set from xFlags.
         int offset = 0;
 
-        printf(BOLD_CYAN  "\n\t\tData at 0x%lx: ", address);
+        printf(BOLD_CYAN "\n\t\tData at 0x%lx: ", address);
 
         while (offset < bytesToRead)
         {
@@ -447,7 +448,8 @@ int runFlags(int childPID)
             if (data == -1 && errno != 0)
             {
                 perror("ptrace(PTRACE_PEEKDATA) failed" RESET);
-                while (getchar() != '\n');
+                while (getchar() != '\n')
+                    ;
                 Cli(&flags);
                 break;
             }
@@ -468,8 +470,9 @@ int runFlags(int childPID)
         }
         printf(RESET "\n");
 
-        while (getchar() != '\n');
-        
+        while (getchar() != '\n')
+            ;
+
         Cli(&flags);
         break;
     }

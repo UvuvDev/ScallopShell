@@ -2,7 +2,7 @@
 #include "loop.hpp"
 #include "linux/elf.h"
 
-pid_t child; 
+pid_t child;
 
 /**
  *  Scallop Shell
@@ -13,7 +13,8 @@ pid_t child;
  *
  */
 
-void initializeSymbols(char* argv[]) {
+void initializeSymbols(char *argv[])
+{
 
     system("clear");
 
@@ -25,8 +26,10 @@ void initializeSymbols(char* argv[]) {
     char desc[30];
     SymbolType type;
 
-    while (fscanf(symbolFile, "%lx %s %c", &addr, desc, &type) == 3) {
-        switch (type) {
+    while (fscanf(symbolFile, "%lx %s %c", &addr, desc, &type) == 3)
+    {
+        switch (type)
+        {
         case 's':
             symbolTable.emplace_back(Symbol(addr, desc, type));
             break;
@@ -34,29 +37,27 @@ void initializeSymbols(char* argv[]) {
             symbolTable.emplace_back(Symbol(addr, desc, type));
             break;
         case 'l':
-            uint64_t topAddrLoop; 
+            uint64_t topAddrLoop;
             int maxrun;
             fscanf(symbolFile, "%lx %d", &topAddrLoop, &maxrun);
             if (addr < topAddrLoop)
                 memMaps.emplace_back(addr, topAddrLoop, desc, type, maxrun);
-            else 
+            else
                 memMaps.emplace_back(topAddrLoop, addr, desc, type, maxrun);
             break;
         case 'm':
-            uint64_t topAddrMap; 
+            uint64_t topAddrMap;
             fscanf(symbolFile, "%lx", &topAddrMap);
             if (addr < topAddrMap)
                 memMaps.emplace_back(addr, topAddrMap, desc, type, -1);
-            else 
+            else
                 memMaps.emplace_back(topAddrMap, addr, desc, type, -1);
             break;
         }
-    }        
+    }
 
-    fclose(symbolFile);  
-
+    fclose(symbolFile);
 }
-
 
 int main(int argc, char *argv[])
 {
@@ -96,7 +97,7 @@ int main(int argc, char *argv[])
     // If parent process...
     else if (child > 0)
     {
-        
+
         assemblyDump(child);
     }
     else

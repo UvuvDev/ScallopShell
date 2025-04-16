@@ -125,7 +125,6 @@ int assemblyDump(pid_t child)
 
     waitpid(child, &status, 0); // Stop the child process until we start it again
 
-    
     if (WIFSTOPPED(status))
     {
         std::cout << "Child stopped, now continuing execution." << std::endl;
@@ -139,7 +138,7 @@ int assemblyDump(pid_t child)
         flags = CliFlags::ni;
         bool wasInLIBCLastInsn = false;
 
-        FILE* asmDump = initFile("prog_asm.s");
+        FILE *asmDump = initFile("prog_asm.s");
 
         // While the program is running
         while (true)
@@ -173,7 +172,7 @@ int assemblyDump(pid_t child)
                     spinner();
                     if (started && !wasInLIBCLastInsn)
                         isInLibC(regs.rip);
-                    wasInLIBCLastInsn = true;                    
+                    wasInLIBCLastInsn = true;
                     continue;
                 }
 

@@ -40,11 +40,11 @@
 #define BOLD_MAGENTA "\033[1;35m"
 #define BOLD_CYAN "\033[1;36m"
 #define BOLD_WHITE "\033[1;37m"
-#define BOLD_CRIMSON    "\033[38;5;160m"  // A deep red (crimson)
-#define BOLD_FIREBRICK  "\033[38;5;124m"  // Another intense deep red (firebrick)
-#define BOLD_TANGERINE  "\033[38;5;214m"  // A bright, vibrant orange (tangerine)
-#define BOLD_AMBER      "\033[38;5;220m"  // A warm amber (yellow-orange)
-#define BOLD_GOLD       "\033[38;5;178m"  // A soft, warm golden yellow
+#define BOLD_CRIMSON "\033[38;5;160m"   // A deep red (crimson)
+#define BOLD_FIREBRICK "\033[38;5;124m" // Another intense deep red (firebrick)
+#define BOLD_TANGERINE "\033[38;5;214m" // A bright, vibrant orange (tangerine)
+#define BOLD_AMBER "\033[38;5;220m"     // A warm amber (yellow-orange)
+#define BOLD_GOLD "\033[38;5;178m"      // A soft, warm golden yellow
 
 // Underline Colors
 #define UNDERLINE_BLACK "\033[4;30m"
@@ -132,7 +132,7 @@ public:
 
     MemMap(uint64_t bottomAddr,
            uint64_t topAddr,
-           char* desc,
+           char *desc,
            char type, int maxrun)
     {
         this->bottomAddr = bottomAddr;
@@ -143,10 +143,13 @@ public:
         this->run = 0;
     }
 
-    bool canRun() {
-        if (maxrun < 0) return true;
+    bool canRun()
+    {
+        if (maxrun < 0)
+            return true;
 
-        if (run < maxrun) return true;
+        if (run < maxrun)
+            return true;
 
         return false;
     }
@@ -192,7 +195,6 @@ int hasLoopSymbol(uint64_t address);
 int hasInstrucBreak(char *instruction);
 
 bool isIgnored(std::vector<std::pair<uint64_t, uint64_t>> range, uint64_t addr);
-
 
 int filterLinuxInit(pid_t child);
 
