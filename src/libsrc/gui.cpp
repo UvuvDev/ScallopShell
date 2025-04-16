@@ -187,8 +187,7 @@ void printBreak(int symbolI)
     {
         // Print the modified instruction with symbols
         std::cout << BOLD_RED << "  " << symbolTable.at(symbolI).getAddr() << ": " << insn[0].mnemonic << "\t\t" << insn[0].op_str << " |\t<- " << symbolTable.at(symbolI).getDesc() << RESET << "\n";
-        Cli(&flags);
-        runCliThisTick = true;
+        flags = CliFlags::ni;
     }
     else
     {
@@ -196,8 +195,7 @@ void printBreak(int symbolI)
         if (hasInstrucBreak(insn[0].mnemonic) == 1)
         {
             std::cout << BOLD_MAGENTA << "  " << (uint64_t *)insn[0].address << ": " << insn[0].mnemonic << "\t\t" << insn[0].op_str << RESET << "\n";
-            Cli(&flags);
-            runCliThisTick = true;
+            flags = CliFlags::ni;
             return;
         }
     }
