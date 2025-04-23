@@ -7,13 +7,30 @@
 #include <fstream>
 #include <iostream>
 #include <cstring>
+#include <sys/mman.h>
+#include <sys/ptrace.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <sys/syscall.h>
+#include <sys/ioctl.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <stdint.h>
+#include <errno.h>
+#include <fcntl.h>
 
-#include <dlfcn.h>
 #include <sys/ptrace.h>
 #include <sys/types.h>
 #include <sys/user.h>
 #include <sys/wait.h>
 #include <sys/personality.h>
+#include <sys/syscall.h>
+#include <sys/ioctl.h>
+
+#include <dlfcn.h>
+#include <linux/perf_event.h>
 
 #include "capstone/capstone.h"
 #include "eventhandler.hpp"

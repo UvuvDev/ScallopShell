@@ -1,6 +1,7 @@
 #include "loop.hpp"
 #include "datastructs.hpp"
 #include "gui.hpp"
+#include "jump.hpp"
 #include "asm_dump.hpp"
 
 cs_insn *insn;
@@ -15,7 +16,7 @@ bool runCliThisTick = false;
 bool started = false;
 
 size_t disassemble(pid_t child, struct user_regs_struct *regs,
-                   csh *handle, int *status, int *paddingLen,
+                   csh *handle, int *status,
                    bool run = true, cs_insn **insnArg = nullptr)
 {
 
@@ -49,8 +50,6 @@ size_t disassemble(pid_t child, struct user_regs_struct *regs,
         uint8_t opcode[16];
         assignOpcode(opcode, firstHalf, secondHalf);
 
-        *paddingLen = regs->rip - lastRIP;
-
         // Disassemble the opcode (max 16 bytes), telling it its at the addr $RIP
         return cs_disasm(*handle, opcode, 16, (*regs).rip, 0, &insn);
     }
@@ -62,53 +61,10 @@ size_t disassemble(pid_t child, struct user_regs_struct *regs,
         uint8_t opcode[16];
         assignOpcode(opcode, firstHalf, secondHalf);
 
-        *paddingLen = regs->rip - lastRIP;
-
         // Disassemble the opcode (max 16 bytes), telling it its at the addr $RIP
         return cs_disasm(*handle, opcode, 16, lastRIP, 0, insnArg);
     }
 }
-/*
-bool jumpOccurred(user_regs_struct *regs, uint64_t *jmpAddrArg,
-        uint64_t *stayAddrArg, uint64_t lastRIP,
-        int paddingLen, pid_t child)
-{
-
-    csh tempHandler;
-    cs_insn* tempInsn;
-    user_regs_struct tempReg;
-    int status;
-
-    // If disassembler fails to open, break
-    if (cs_open(CS_ARCH_X86, CS_MODE_64, &tempHandler) != CS_ERR_OK)
-        return -1;
-
-    // Disassemble
-    int cnt = disassemble(child, &tempReg, &tempHandler, &status, &paddingLen, false, &tempInsn);
-
-
-    *stayAddrArg = lastRIP;
-
-    // Jump didn't occur. Set Jmp Addr to 0 and stayAddrArg to
-    if (cnt > 0 && lastRIP + tempInsn[0].size == regs->rip)
-    {
-        *jmpAddrArg = 0;
-        return false;
-    }
-    else if (cnt > 1 && lastRIP + tempInsn[0].size + tempInsn[1].size == regs->rip) {
-        *jmpAddrArg = 0;
-        return false;
-    }
-    else
-    {
-        *jmpAddrArg = regs->rip;
-        // printf("stayaddr = 0x%lx\t\tjmpaddr = 0x%lx", *stayAddrArg, *jmpAddrArg);
-        return true;
-    }
-
-    cs_close(&tempHandler);
-
-}*/
 
 int assemblyDump(pid_t child)
 {
@@ -144,10 +100,7 @@ int assemblyDump(pid_t child)
         while (true)
         {
 
-            uint64_t lastRIP = regs.rip;
-            int paddingLen;
-
-            size_t count = disassemble(child, &regs, &handle, &status, &paddingLen);
+            size_t count = disassemble(child, &regs, &handle, &status);
 
             if ((signed long)count < 0)
             {
@@ -179,64 +132,10 @@ int assemblyDump(pid_t child)
                 wasInLIBCLastInsn = false;
                 started = true;
 
-                /*uint64_t jmpAddr;
-                uint64_t stayAddr;
-                bool jumped = jumpOccurred(&regs, &jmpAddr, &stayAddr, lastRIP, paddingLen, child);
-
-                // If theres a jump instruction
-                if (jumped)
-                {
-
-                    std::shared_ptr<LinkedList> lastNode = jumpTable;
-                    int length = 0;
-
-                    uint64_t jmpAddr = regs.rip;
-                    // printf("\n\n");
-                    bool duplicateFound = false;
-
-                    while (lastNode != NULL && lastNode->next != NULL)
-                    {
-                        if (lastNode->jmpAddr == jmpAddr)
-                        {
-                            lastNode->next = NULL;
-                            duplicateFound = true;
-                            break;
-                        }
-                        else if (lastNode->stayAddr == stayAddr)
-                        {
-                            lastNode->next = NULL;
-                            duplicateFound = true;
-                            break;
-                        }
-                        // printf(" 0x%lx -> ", lastNode->jmpAddr);
-                        length++;
-                        lastNode = lastNode->next;
-                    }
-
-                    if (!duplicateFound)
-                    {
-                        std::shared_ptr<LinkedList> newNode = std::make_shared<LinkedList>(nullptr, jmpAddr, stayAddr);
-                        // printf("new addr = %lx", jmpAddr);
-                        if (jumpTable == NULL)
-                        {
-                            jumpTable = newNode;
-                        }
-                        else
-                        {
-                            lastNode->next = newNode;
-                        }
-                    }
-
-                    jumpTable->printList();
-
-                    // printf("\n\n");
-
-                    printInstructions(0);
-                    handleBacktrace(0);
-                }*/
-
                 printInstructions();
                 handleBacktrace();
+
+                handleJumps(count);
 
                 if (hasLoopSymbol(insn[0].address) == -1)
                 {

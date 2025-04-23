@@ -13,5 +13,10 @@ extern CliFlags flags;
 extern bool runCliThisTick;
 extern bool started;
 
+size_t disassemble(pid_t child, struct user_regs_struct *regs,
+    csh *handle, int *status,
+    bool run, cs_insn **insnArg);
+
+
 int assemblyDump(pid_t child);
 
