@@ -13,12 +13,12 @@ Current Functionality:
 - GDB-like CLI
 - Backtracing
 - Assembly dumping into a file
+- Examining memory/registers
 
 Features in Development:
 
 - Jump tracking (a more general backtrace)
 - Watchpoints
-- Examining memory/registers
 - Automated string/flag memory searching
 - ANGR integration
 
