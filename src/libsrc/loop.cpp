@@ -135,7 +135,7 @@ int assemblyDump(pid_t child)
                 printInstructions();
                 handleBacktrace();
 
-                handleJumps(count);
+                //handleJumps(count);
 
                 if (hasLoopSymbol(insn[0].address) == -1)
                 {
