@@ -1,8 +1,8 @@
 #include "core.hpp"
 
-std::vector<std::pair<uint64_t, uint64_t>> ignoredFunctions;
+std::vector<MemMap *> ignoredFunctions;
 std::vector<Symbol> symbolTable;
-std::vector<MemMap> memMaps;
+std::vector<MemMap *> memMaps;
 
 void assignOpcode(uint8_t *opcode, int firstHalf, int secondHalf)
 {
@@ -31,21 +31,8 @@ void assignOpcode(uint8_t *opcode, int firstHalf, int secondHalf)
 void startupMsg()
 {
 
-    std::ifstream file("README.md"); // Open the file in text mode.
-    if (!file.is_open())
-    {
-        std::cerr << "Error: Could not open README.md" << std::endl;
-        return;
-    }
-
-    std::string line;
-    // Read file line by line and output it to the console.
-    while (std::getline(file, line))
-    {
-        std::cout << line << "\n";
-    }
-
-    file.close(); // Close the file.
+    std::cout << "Scallop Shell - Disassembler and Debugger for self modifying / polymorphic binaries.\n";
+    std::cout << "  - Bradley Fernandez / Uvuv\n\n\n";
 }
 
 char *makeFilepath(char *argv)
@@ -72,12 +59,15 @@ int hasSymbol(uint64_t address)
     return -1;
 }
 
+/**
+ * Checks if the address you give is in any of the given memory map ranges, and if so, what index its in
+ */
 int hasLoopSymbol(uint64_t address)
 {
 
     for (int i = 0; i < memMaps.size(); i++)
     {
-        if (memMaps.at(i).bottomAddr <= address && memMaps.at(i).topAddr >= address)
+        if (memMaps.at(i)->isInRange(address))
             return i;
     }
     return -1;
@@ -94,102 +84,125 @@ int hasInstrucBreak(char *instruction)
     return -1;
 }
 
-// Returns true if the given address is within libc.
-bool isIgnored(std::vector<std::pair<uint64_t, uint64_t>> ranges, uint64_t addr)
+std::vector<std::string> findInternalLibs()
 {
 
-    for (auto &i : ranges)
-    {
-        if (i.first <= addr && i.second >= addr)
-            return true;
-    }
-    return false;
-}
+    std::ifstream libconfig("config/libraryconfig.txt");
+    std::vector<std::string> libs;
+    std::string tempString;
 
-int filterLinuxInit(pid_t child)
-{
-    char cmd[100];
-    snprintf(cmd, 100, "cat /proc/%d/maps | grep \"ld-linux-x86-64.so\" ", child);
-    FILE *map = popen(cmd, "r"); // Run a command that finds all GLIBC refs in /proc/##/maps
-
+    // Check if libconfig exists
+    if (!libconfig.is_open())
     {
-        uint64_t lowerLibCTemp;
-        uint64_t upperLibCTemp;
-        while (fscanf(map, "%lx-%lx%*[^\n]\n", &lowerLibCTemp, &upperLibCTemp) == 2)
-        {
-            ignoredFunctions.emplace_back(std::make_pair(lowerLibCTemp, upperLibCTemp));
-        }
+        std::cout << BOLD_RED << "ERROR! YOU NEED A LIBRARYCONFIG.TXT FILE. ADD FILE AND RESTART" << RESET << std::endl;
+        exit(1);
     }
 
-    fclose(map);
+    // Save each line of config
+    while (std::getline(libconfig, tempString))
+    {
+        libs.emplace_back(tempString);
+    }
 
-    return 0;
+    return libs;
 }
 
-int filterLibC(pid_t child, int instructionsRun, bool started)
+void conditionallyUpdateMaps(std::vector<MemMap *> *_map, std::string desc, uint64_t lower, uint64_t upper, char type)
 {
-    // Check to see if LibC has been loaded yet
-    if (instructionsRun % 100000 == 0 && !started)
+
+    for (auto map : *_map)
     {
-
-        /*== READ THE MEMORY MAP OF LIBC ==*/
-        char cmd[100];
-        snprintf(cmd, 100, "cat /proc/%d/maps | grep \"libc\" ", child);
-        FILE *map = popen(cmd, "r"); // Run a command that finds all GLIBC refs in /proc/##/maps
-
-        uint64_t lowerLibCTemp;
-        uint64_t upperLibCTemp;
-        uint64_t libcbase = UINT64_MAX;
-
-        while (fscanf(map, "%lx-%lx%*[^\n]\n", &lowerLibCTemp, &upperLibCTemp) == 2)
+        // If it's in the map vector already, add to the address vector on the map
+        if (map->desc.compare(desc) == 0)
         {
-            ignoredFunctions.emplace_back(std::make_pair(lowerLibCTemp, upperLibCTemp));
-
-            if (lowerLibCTemp < libcbase)
-                libcbase = lowerLibCTemp;
+            map->addMemoryRange(lower, upper); // Add memory mappings
+            return;
         }
+    }
 
-        pclose(map);
+    // Otherwise, add a new map
+    _map->emplace_back(new MemMap(lower, upper, desc, type, 0));
+}
 
-        /*== LOAD SYMBOL TABLE ==*/
+void checkLoadedMappings(std::vector<std::string> libs)
+{
 
-        // Load the symbol table of LibC
-        FILE *libc_symbols = popen("readelf -sW /lib/x86_64-linux-gnu/libc.so.6", "r");
-        if (libc_symbols == NULL)
-        {
-            return 1;
+    // Open process memory map
+    std::string mapPath = "/proc/" + std::to_string(child) + "/maps";
+    FILE *procMaps = fopen(mapPath.c_str(), "r");
+    if (!procMaps)
+    {
+        std::cout << BOLD_RED << "Failure reading proc/maps! Exiting." << RESET << std::endl;
+        exit(1);
+        return;
+    }
+
+    // Parse proc maps and get the current libraries and locations in mem
+    char mapBuffer[1024];
+    uint64_t lower, upper;
+
+    // For every map inside /proc/maps
+    while (fgets(mapBuffer, sizeof(mapBuffer), procMaps)) {
+        unsigned long lower = 0, upper = 0, offset = 0, inode = 0;
+        unsigned int maj = 0, min = 0;
+        char perms[5] = {};
+        char path[1024] = {};            
+
+        // /proc/<pid>/maps format:
+        // address          perms offset  dev     inode   pathname?
+        // 00400000-0040b000 r-xp 00000000 08:02  131073  /bin/cat
+        int dataRead = sscanf(mapBuffer,
+                       "%lx-%lx %4s %lx %x:%x %lu %1023s",
+                       &lower, &upper, perms, &offset, &maj, &min, &inode, path);
+
+        std::string filename = path;
+
+        if (dataRead == 2) {
+            continue;
         }
-
-        uint64_t libcaddr;
-        char symbolName[256]; // Make sure the array is large enough
-        char line[1024];
-        int header_found = 0;
-
-        // Process output line by line.
-        while (fgets(line, sizeof(line), libc_symbols) != NULL)
+        
+        // Iterate through the process maps and add the files seen into currentProcessMem
+        for (auto library : libs)
         {
-            // Look for the header line that begins the symbol table entries.
-            if (!header_found)
+        
+            // One of those weird allocated memory blocks
+            if (filename[0] == '[') {
+                conditionallyUpdateMaps(&ignoredFunctions, filename, lower, upper, 'i'); // Add memmaps from proc maps to a vector
+            }
+
+            // If the config'd line is a directory
+            if (library.back() == '/')
             {
-                if (strstr(line, "Num:") != NULL)
-                {
-                    header_found = 1; // Now the following lines are the entries.
+                //std::cout << "fifeowipfuewpoifueqpofywe87ry3297u32fj327f82ufew7f8ewuf78weqfwqe" << std::endl;
+                // If it's in the config file directory, add to the map
+                if (filename.compare(0, library.size(), library, 0, library.size()) == 0)
+                {                    
+                    conditionallyUpdateMaps(&ignoredFunctions, filename, lower, upper, 'i'); // Add memmaps from proc maps to a vector
+                    break;
                 }
-                continue; // Skip header lines.
+                else
+                {
+                    continue;
+                }
             }
-
-            if (sscanf(line, " %*d: %lx %*d %*s %*s %*s %*s %[^\n]", &libcaddr, symbolName) != 2)
+            else
             {
-                continue;
+                //std::cout << "1ry329e8rte8fweuifeduifqwripufwqfeqw" << std::endl;
+                // If it's in the config file directory, add to the map
+                if (filename.compare(library) == 0)
+                {
+                    conditionallyUpdateMaps(&ignoredFunctions, filename, lower, upper, 'i'); // Add memmaps from proc maps to a vector
+                    break;
+                }
+                else
+                {
+                    continue;
+                }
             }
-            // printf("Address: 0x%lx, Symbol: %s\n", libcaddr, symbolName);
-            // printf("%lx\n", libcbase);
-            symbolTable.emplace_back(Symbol(libcbase + libcaddr, symbolName, 's'));
         }
-
-        pclose(libc_symbols);
     }
-    return 0;
+
+    fclose(procMaps);
 }
 
 void isInLibC(uint64_t rip)
@@ -215,4 +228,61 @@ void isInLibC(uint64_t rip)
             }
         }
     }
+}
+
+int watch_map_files(pid_t pid)
+{
+    int fd = inotify_init1(IN_NONBLOCK);
+    if (fd < 0)
+        return -1;
+    std::string dir = "/proc/" + std::to_string(pid) + "/map_files";
+    int wd = inotify_add_watch(fd, dir.c_str(), IN_CREATE | IN_DELETE | IN_DELETE_SELF);
+    if (wd < 0)
+    {
+        close(fd);
+        return -1;
+    }
+    return fd; // use poll/epoll on fd; on event → read maps & parse
+}
+
+int map_files_changed(int inotify_fd)
+{
+    struct pollfd pfd{inotify_fd, POLLIN, 0};
+    int pr = poll(&pfd, 1, 0); // non-blocking check
+    if (pr < 0)
+        return -1; // poll error
+    if (pr == 0)
+        return 0; // nothing to read
+
+    bool changed = false;
+    char buf[4096] __attribute__((aligned(__alignof__(struct inotify_event))));
+    for (;;)
+    {
+        ssize_t n = read(inotify_fd, buf, sizeof(buf));
+        if (n < 0)
+        {
+            if (errno == EAGAIN)
+                break; // drained
+            return -1;
+        }
+        if (n == 0)
+            break;
+
+        const char *ptr = buf;
+        while (ptr < buf + n)
+        {
+            const struct inotify_event *ev = reinterpret_cast<const struct inotify_event *>(ptr);
+            if (ev->mask & (IN_CREATE | IN_DELETE | IN_MOVED_FROM | IN_MOVED_TO))
+            {
+                changed = true;
+            }
+            if (ev->mask & (IN_DELETE_SELF | IN_MOVE_SELF | IN_UNMOUNT |
+                            IN_IGNORED | IN_Q_OVERFLOW))
+            {
+                changed = true;
+            }
+            ptr += sizeof(struct inotify_event) + ev->len;
+        }
+    }
+    return changed ? 1 : 0;
 }

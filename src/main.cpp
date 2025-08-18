@@ -8,7 +8,7 @@ pid_t child;
  *  Scallop Shell
  *      Bradley Fernandez 2025
  *
- * Debug obfuscated programs with ease. See README.md.
+ * Debug self modifying programs with ease. See README.md.
  *
  *
  */
@@ -41,17 +41,17 @@ void initializeSymbols(char *argv[])
             int maxrun;
             fscanf(symbolFile, "%lx %d", &topAddrLoop, &maxrun);
             if (addr < topAddrLoop)
-                memMaps.emplace_back(addr, topAddrLoop, desc, type, maxrun);
+                memMaps.emplace_back(new MemMap(addr, topAddrLoop, desc, type, maxrun));
             else
-                memMaps.emplace_back(topAddrLoop, addr, desc, type, maxrun);
+                memMaps.emplace_back(new MemMap(topAddrLoop, addr, desc, type, maxrun));
             break;
         case 'm':
             uint64_t topAddrMap;
             fscanf(symbolFile, "%lx", &topAddrMap);
             if (addr < topAddrMap)
-                memMaps.emplace_back(addr, topAddrMap, desc, type, -1);
+                memMaps.emplace_back(new MemMap(addr, topAddrMap, desc, type, -1));
             else
-                memMaps.emplace_back(topAddrMap, addr, desc, type, -1);
+                memMaps.emplace_back(new MemMap(topAddrMap, addr, desc, type, -1));
             break;
         }
     }
@@ -75,6 +75,7 @@ int main(int argc, char *argv[])
     char *programFilepath = makeFilepath(argv[1]);
 
     initializeSymbols(argv);
+    std::vector<std::string> libs = findInternalLibs();
 
     /* When all pre processing is done, fork. */
     child = fork();
@@ -98,6 +99,7 @@ int main(int argc, char *argv[])
         perror("execl"); // Only reached if execl fails
         exit(1);
     }
+    
     // If parent process...
     else if (child > 0)
     {

@@ -1,7 +1,7 @@
 #include "jump.hpp"
 #include "loop.hpp"
 
-#define PAGE_SIZE 4096
+#define PAGE_SIZE_ 4096
 #define MMAP_DATA_PAGES 8
 #define MMAP_TOTAL_PAGES (1 + MMAP_DATA_PAGES)
 
@@ -40,6 +40,8 @@ bool checkPerfEventParanoid()
 
         return false;
     }
+    
+    return true;
 }
 
 int initializeLBRTracking()
@@ -66,7 +68,7 @@ int initializeLBRTracking()
         return 1;
     }
 
-    size_t mmap_size = PAGE_SIZE * MMAP_TOTAL_PAGES;
+    size_t mmap_size = PAGE_SIZE_ * MMAP_TOTAL_PAGES;
     void *memMap = mmap(NULL, mmap_size, PROT_READ | PROT_WRITE, MAP_SHARED, perfEv, 0);
     if (memMap == MAP_FAILED)
     {
@@ -77,8 +79,8 @@ int initializeLBRTracking()
     printf("perf_event_open and mmap succeeded.\n");
 
     meta = (struct perf_event_mmap_page *)memMap;
-    LBR = (uint8_t *)memMap + PAGE_SIZE;
-    data_buf_size = PAGE_SIZE * MMAP_DATA_PAGES;
+    LBR = (uint8_t *)memMap + PAGE_SIZE_;
+    data_buf_size = PAGE_SIZE_ * MMAP_DATA_PAGES;
 
     printf("finished initializing.\n");
 
@@ -244,4 +246,6 @@ bool handleJumps(int cnt)
         // printInstructions();
         // handleBacktrace();
     }
+
+    return true;
 }

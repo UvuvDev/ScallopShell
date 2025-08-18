@@ -156,25 +156,34 @@ void clearLine()
 void printMemMap(int index)
 {
 
-    if (memMaps.at(index).canRun())
+    if (memMaps.at(index)->canRun())
     {
+        
+        for (auto addr : memMaps.at(index)->addressSpaces) {
+            
+            if (addr.first <= regs.rip && addr.second >= regs.rip) {
+                // If its the top address print the header
+                if (insn[0].address == addr.first)
+                    std::cout << BOLD_GREEN << "\n  #--------" << memMaps.at(index)->desc << "--------#\n\n"
+                            << RESET;
 
-        // If its the top address print the header
-        if (insn[0].address == memMaps.at(index).bottomAddr)
-            std::cout << BOLD_GREEN << "\n  #--------" << memMaps.at(index).desc << "--------#\n\n"
-                      << RESET;
+                // Print the instruction address, instruction and arguments
+                printf("\t%s0x%" PRIx64 ":\t%s\t\t%s\n%s", GREEN, insn[0].address, insn[0].mnemonic,
+                    insn[0].op_str, RESET);
 
-        // Print the instruction address, instruction and arguments
-        printf("\t%s0x%" PRIx64 ":\t%s\t\t%s\n%s", GREEN, insn[0].address, insn[0].mnemonic,
-               insn[0].op_str, RESET);
-
-        // If its the bottom addr print the footer
-        if (insn[0].address == memMaps.at(index).topAddr)
-        {
-            memMaps.at(index).run++;
-            std::cout << BOLD_GREEN << "\n  #-------- end of " << memMaps.at(index).desc << "--------#\n\n"
-                      << RESET;
+                // If its the bottom addr print the footer
+                if (insn[0].address == addr.second)
+                {
+                    memMaps.at(index)->run++;
+                    std::cout << BOLD_GREEN << "\n  #-------- end of " << memMaps.at(index)->desc << "--------#\n\n"
+                            << RESET;
+                }
+            }
+            
+            
+            
         }
+        
     }
 }
 
@@ -218,7 +227,8 @@ void printInstructions()
 {
     int symbolI = hasSymbol(insn[0].address);
     int mapI = hasLoopSymbol(insn[0].address);
-
+ 
+    
     if (mapI != -1)
     {
         printMemMap(mapI);

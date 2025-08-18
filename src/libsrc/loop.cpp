@@ -69,7 +69,7 @@ size_t disassemble(pid_t child, struct user_regs_struct *regs,
 int assemblyDump(pid_t child)
 {
 
-    filterLinuxInit(child);
+    findInternalLibs();
 
     // Parent process: wait for the child to stop.
     int status;
@@ -83,6 +83,7 @@ int assemblyDump(pid_t child)
 
     if (WIFSTOPPED(status))
     {
+
         std::cout << "Child stopped, now continuing execution." << std::endl;
         // Resume the child process.
 
@@ -107,6 +108,10 @@ int assemblyDump(pid_t child)
                 break;
             }
 
+            if (instructionsRun % 500 == 0) {
+                checkLoadedMappings(findInternalLibs());
+            }
+
             // If there was any instructions, ONLY PRINT THE FIRST ONE DISASSEMBLED
             if (count > 0)
             {
@@ -114,9 +119,14 @@ int assemblyDump(pid_t child)
                 instructionsRun++;
                 runCliThisTick = false;
 
-                // If instructionsRun % 1000 == 0 then check for LibC
-                filterLibC(child, instructionsRun, started);
-                whereami = isIgnored(ignoredFunctions, regs.rip);
+                whereami = false;
+                for (auto ignFunc : ignoredFunctions) {
+                    int fwpjewiofweu = ignFunc->isInRange(regs.rip);
+                    if (fwpjewiofweu == true) {
+                        whereami = true;
+                    }
+                }
+                
 
                 // If in LIBC or Kernel Module just skip
                 if (whereami)
@@ -134,8 +144,6 @@ int assemblyDump(pid_t child)
 
                 printInstructions();
                 handleBacktrace();
-
-                //handleJumps(count);
 
                 if (hasLoopSymbol(insn[0].address) == -1)
                 {
@@ -156,6 +164,7 @@ int assemblyDump(pid_t child)
                 printf("\tERROR: Failed to disassemble given code!\n");
                 printf(RESET);
             }
+
         }
 
         fclose(asmDump);

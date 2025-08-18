@@ -7,12 +7,6 @@
 #include <fstream>
 #include <iostream>
 #include <cstring>
-#include <sys/mman.h>
-#include <sys/ptrace.h>
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <sys/syscall.h>
-#include <sys/ioctl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -20,14 +14,27 @@
 #include <stdint.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <poll.h>
+#include <unistd.h>    
+#include <errno.h>     
+
 
 #include <sys/ptrace.h>
 #include <sys/types.h>
 #include <sys/user.h>
+
+#include <sys/inotify.h>
 #include <sys/wait.h>
+#include <sys/mman.h>
+#include <sys/ptrace.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <sys/syscall.h>
+#include <sys/ioctl.h>
 #include <sys/personality.h>
 #include <sys/syscall.h>
 #include <sys/ioctl.h>
+#include <bits/stdc++.h>
 
 #include <dlfcn.h>
 #include <linux/perf_event.h>
@@ -99,6 +106,7 @@ public:
         this->desc = desc;
         this->type = type;
     }
+    
     Symbol(uint64_t addr, char *desc, SymbolType type)
     {
         this->addr = (uint64_t *)addr;
@@ -127,8 +135,7 @@ typedef std::vector<Symbol> SymbolTable;
 class MemMap
 {
 public:
-    uint64_t bottomAddr;
-    uint64_t topAddr;
+    std::vector<std::pair<uint64_t, uint64_t>> addressSpaces;
     char type;
     int run;
     int maxrun;
@@ -139,8 +146,7 @@ public:
            std::string desc,
            char type, int maxrun)
     {
-        this->bottomAddr = bottomAddr;
-        this->topAddr = topAddr;
+        this->addressSpaces.emplace_back(std::make_pair(bottomAddr, topAddr));
         this->type = type;
         this->desc = desc;
         this->maxrun = maxrun;
@@ -152,8 +158,7 @@ public:
            char *desc,
            char type, int maxrun)
     {
-        this->bottomAddr = bottomAddr;
-        this->topAddr = topAddr;
+        this->addressSpaces.emplace_back(std::make_pair(bottomAddr, topAddr));
         this->type = type;
         this->desc = desc;
         this->maxrun = maxrun;
@@ -170,16 +175,69 @@ public:
 
         return false;
     }
+
+    void addMemoryRange(uint64_t bottomAddr, uint64_t topAddr) {
+        this->addressSpaces.emplace_back(std::make_pair(bottomAddr, topAddr));
+    }
+
+    bool isInRange(uint64_t RIP) {
+        
+        for (auto i : this->addressSpaces) {
+            if (i.first <= RIP && i.second >= RIP) return true;
+        }
+
+        return false;
+    }
+
+    bool combineMap(MemMap* map) {
+
+        // If descriptions are identical
+        if (map->desc.compare(this->desc) == 0) {
+            
+            // Iterate through and add address ranges that aren't already on there
+            for (auto range : map->addressSpaces) {
+                for (auto selfRange : this->addressSpaces) {
+                    if (range.first == selfRange.first && range.second == selfRange.second) continue;
+                    else this->addressSpaces.emplace_back(std::make_pair(range.first, range.second));
+                }
+                
+            }
+
+            return true;
+        }
+        
+        return false;
+    }
+
+    bool operator==(MemMap* map) {
+        
+        // If descriptions are identical
+        if (map->desc.compare(this->desc) == 0) {
+            
+            // Iterate through and add address ranges that aren't already on there
+            for (auto range : map->addressSpaces) {
+                for (auto selfRange : this->addressSpaces) {
+                    if (range.first == selfRange.first && range.second == selfRange.second) continue;
+                    else return false;
+                }
+                
+            }
+
+            return true;
+        }
+        
+        return false;
+    }
 };
 
 /*===== GLOBAL VARIABLE DEFS =====*/
 
 //
-extern std::vector<std::pair<uint64_t, uint64_t>> ignoredFunctions;
+extern std::vector<MemMap*> ignoredFunctions;
 //
 extern std::vector<Symbol> symbolTable;
 //
-extern std::vector<MemMap> memMaps;
+extern std::vector<MemMap*> memMaps;
 extern struct user_regs_struct regs;
 extern pid_t child;
 extern bool printGLIBC;
@@ -194,6 +252,9 @@ void assignOpcode(uint8_t *opcode, int firstHalf, int secondHalf);
  * Display README.md
  */
 void startupMsg();
+/**
+ * Check if in ascii
+ */
 int isAscii(char *str, int n);
 /**
  * Prefix the arg with a ./
@@ -204,6 +265,16 @@ char *makeFilepath(char *argv);
  */
 int hasSymbol(uint64_t address);
 
+/**
+ * Get the internal libs from config/libraryconfig.txt and set them to be filtered
+ */
+std::vector<std::string> findInternalLibs();
+
+/**
+ * Check mappings, see if new libs have been loaded.
+ */
+void checkLoadedMappings(std::vector<std::string> libs);
+
 int hasLoopSymbol(uint64_t address);
 
 /**
@@ -213,8 +284,6 @@ int hasInstrucBreak(char *instruction);
 
 bool isIgnored(std::vector<std::pair<uint64_t, uint64_t>> range, uint64_t addr);
 
-int filterLinuxInit(pid_t child);
-
-int filterLibC(pid_t child, int instructionsRun, bool started);
-
 void isInLibC(uint64_t rip);
+
+int watch_map_files(pid_t pid);

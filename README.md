@@ -1,3 +1,4 @@
+
 --- ASM DUMP DESCRIPTION ---
 
 Dump all instructions that are run by the program into a text file. You can run strings on it to isolate the instructions you want, or remove the ones you don't. This gets past self modifying techniques (like encrypting the instructions one at a time). 
@@ -24,9 +25,14 @@ Features in Development:
 
 # To compile from source 
 
-First download the capstone package. WITHOUT THIS THIS WILL NOT FUNCTION.
+First download the capstone package. WITHOUT THIS THIS WILL NOT FUNCTION. For me in Fedora, it'll be:
+```bash
+sudo dnf install capstone        # Just running the precompiled binary
+sudo dnf install capstone-devel  # Compiling from source
+```
+But your specific install may vary, check the documentation.
 
-Run this in the terminal:
+Run this in the terminal: 
 
 g++ -g $(find . -name "*.cpp") -I./include -L./src/ -leventhandler -lcapstone -o scallop
 
