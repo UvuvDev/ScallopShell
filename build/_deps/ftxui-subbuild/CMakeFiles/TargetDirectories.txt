@@ -1,0 +1,3 @@
+/home/bradley/Dev/ScallopShell/build/_deps/ftxui-subbuild/CMakeFiles/ftxui-populate.dir
+/home/bradley/Dev/ScallopShell/build/_deps/ftxui-subbuild/CMakeFiles/edit_cache.dir
+/home/bradley/Dev/ScallopShell/build/_deps/ftxui-subbuild/CMakeFiles/rebuild_cache.dir

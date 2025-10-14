@@ -1,0 +1,21 @@
+# ninja log v6
+0	17	1756937026812699011	ftxui-populate-prefix/src/ftxui-populate-stamp/ftxui-populate-mkdir	1fa79a19b327dd8c
+0	17	1756937026812699011	/home/bradley/Dev/ScallopShell/build/_deps/ftxui-subbuild/ftxui-populate-prefix/src/ftxui-populate-stamp/ftxui-populate-mkdir	1fa79a19b327dd8c
+17	1922	1756937028717697205	ftxui-populate-prefix/src/ftxui-populate-stamp/ftxui-populate-download	d5fef2f40257b10d
+17	1922	1756937028717697205	/home/bradley/Dev/ScallopShell/build/_deps/ftxui-subbuild/ftxui-populate-prefix/src/ftxui-populate-stamp/ftxui-populate-download	d5fef2f40257b10d
+1922	1942	1756937028718697204	ftxui-populate-prefix/src/ftxui-populate-stamp/ftxui-populate-update	1a4494f967c0b177
+1922	1942	1756937028718697204	/home/bradley/Dev/ScallopShell/build/_deps/ftxui-subbuild/ftxui-populate-prefix/src/ftxui-populate-stamp/ftxui-populate-update	1a4494f967c0b177
+1942	1963	1756937028758697166	ftxui-populate-prefix/src/ftxui-populate-stamp/ftxui-populate-patch	83a13551b384ad44
+1942	1963	1756937028758697166	/home/bradley/Dev/ScallopShell/build/_deps/ftxui-subbuild/ftxui-populate-prefix/src/ftxui-populate-stamp/ftxui-populate-patch	83a13551b384ad44
+1963	1985	1756937028780697145	ftxui-populate-prefix/src/ftxui-populate-stamp/ftxui-populate-configure	34440ace3aab18dc
+1963	1985	1756937028780697145	/home/bradley/Dev/ScallopShell/build/_deps/ftxui-subbuild/ftxui-populate-prefix/src/ftxui-populate-stamp/ftxui-populate-configure	34440ace3aab18dc
+1985	2005	1756937028800697126	ftxui-populate-prefix/src/ftxui-populate-stamp/ftxui-populate-build	95fe7fc93850bdbd
+1985	2005	1756937028800697126	/home/bradley/Dev/ScallopShell/build/_deps/ftxui-subbuild/ftxui-populate-prefix/src/ftxui-populate-stamp/ftxui-populate-build	95fe7fc93850bdbd
+2005	2023	1756937028818697109	ftxui-populate-prefix/src/ftxui-populate-stamp/ftxui-populate-install	cbd56c7af33a3865
+2005	2023	1756937028818697109	/home/bradley/Dev/ScallopShell/build/_deps/ftxui-subbuild/ftxui-populate-prefix/src/ftxui-populate-stamp/ftxui-populate-install	cbd56c7af33a3865
+2023	2042	1756937028838697090	ftxui-populate-prefix/src/ftxui-populate-stamp/ftxui-populate-test	416f601f0eebbed3
+2023	2042	1756937028838697090	/home/bradley/Dev/ScallopShell/build/_deps/ftxui-subbuild/ftxui-populate-prefix/src/ftxui-populate-stamp/ftxui-populate-test	416f601f0eebbed3
+2042	2067	1756937028862697067	CMakeFiles/ftxui-populate-complete	5586a6d7727dc968
+2042	2067	1756937028862697067	ftxui-populate-prefix/src/ftxui-populate-stamp/ftxui-populate-done	5586a6d7727dc968
+2042	2067	1756937028862697067	/home/bradley/Dev/ScallopShell/build/_deps/ftxui-subbuild/CMakeFiles/ftxui-populate-complete	5586a6d7727dc968
+2042	2067	1756937028862697067	/home/bradley/Dev/ScallopShell/build/_deps/ftxui-subbuild/ftxui-populate-prefix/src/ftxui-populate-stamp/ftxui-populate-done	5586a6d7727dc968

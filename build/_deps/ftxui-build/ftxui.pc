@@ -1,0 +1,9 @@
+prefix="/usr/local"
+libdir="/usr/local/lib64"
+includedir="/usr/local/include"
+
+Name: ftxui
+Description: 
+Version: 6.1.9
+Cflags: -I${includedir}
+Libs: -L${libdir} -lftxui-component -lftxui-dom -lftxui-screen
