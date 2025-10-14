@@ -1,491 +1,723 @@
 #include "gui.hpp"
 #include "loop.hpp"
 
+#include <deque>
+#include <mutex>
+#include <thread>
+#include <atomic>
+#include <vector>
+#include <string>
+#include <sstream>
+#include <cstdio>
+#include <cstdint>
+#include <inttypes.h>
+#include <cstring>
+#include <cerrno>
+#include <cstdlib>
+
+// FTXUI
+#include <ftxui/component/component.hpp>
+#include <ftxui/component/screen_interactive.hpp>
+#include <ftxui/dom/elements.hpp>
+#include <ftxui/component/scroller.hpp>   
+
+// Single global ScreenInteractive
+static ftxui::ScreenInteractive screen = ftxui::ScreenInteractive::Fullscreen();
+static std::condition_variable cmd_cv;
+// gui.cpp
+std::atomic<bool> g_continue_mode{false}; // start paused (step mode)
+std::atomic<bool> g_quit{false};
+
+namespace
+{
+  struct Model
+  {
+    std::deque<std::string> log;
+    std::deque<std::string> cmdq; // commands typed in FTXUI input line
+    std::string input;
+    std::string status;
+    size_t max_lines = 5000;
+    std::mutex mtx;
+  };
+
+  std::atomic<bool> running{false};
+  Model model;
+  static std::string g_last_cmd = "ni";
+
+  ftxui::Element RenderLog()
+  {
+    std::vector<ftxui::Element> lines;
+    std::lock_guard<std::mutex> lk(model.mtx);
+    lines.reserve(model.log.size());
+    for (auto &s : model.log)
+      lines.push_back(ftxui::text(s));
+    return ftxui::vbox(std::move(lines));
+  }
+
+  ftxui::Component BuildRoot()
+  {
+    // --- input line
+    ftxui::Component input = ftxui::Input(&model.input, "enter command…");
+
+    // --- log view (Element -> Component -> Scroller)
+    auto log_renderer = ftxui::Renderer([&]
+                                        { return RenderLog() | ftxui::vscroll_indicator | ftxui::yframe // clip to viewport
+                                                 | ftxui::size(ftxui::HEIGHT, ftxui::GREATER_THAN, 20) | ftxui::borderRounded; });
+    auto log_scroller = ftxui::Scroller(log_renderer); // <-- makes it scrollable
+
+    // Keep both components in a container so the scroller can receive events.
+    auto container = ftxui::Container::Vertical({
+        log_scroller,
+        input,
+    });
+    container->SetActiveChild(input); // focus starts on input
+
+    auto push_cmd = [&]
+    {
+      std::string cmd;
+      bool did_push = false;
+      {
+        std::lock_guard<std::mutex> lk(model.mtx);
+        cmd.swap(model.input);
+
+        // trim
+        while (!cmd.empty() && (cmd.back() == '\n' || cmd.back() == '\r' || isspace((unsigned char)cmd.back())))
+          cmd.pop_back();
+        while (!cmd.empty() && isspace((unsigned char)cmd.front()))
+          cmd.erase(cmd.begin());
+
+        if (!cmd.empty())
+        {
+          g_last_cmd = cmd;
+          model.cmdq.push_back(cmd);
+          did_push = true;
+        }
+        else if (!g_last_cmd.empty())
+        {
+          model.cmdq.push_back(g_last_cmd); // repeat last command on empty Enter
+          did_push = true;
+        }
+      }
+      if (did_push)
+        cmd_cv.notify_one();
+    };
+
+    auto renderer = ftxui::Renderer(container, [&]
+                                    {
+    ftxui::Element status_el;
+    {
+      std::lock_guard<std::mutex> lk(model.mtx);
+      status_el = ftxui::text(model.status);
+    }
+
+    return ftxui::vbox({
+      ftxui::text(" Scallop Shell — Instruction Panel ")
+        | ftxui::bold | ftxui::center | ftxui::border,
+      log_scroller->Render(),                                   // <-- component
+      ftxui::separator(),
+      ftxui::hbox({ ftxui::text("> "), input->Render() }) | ftxui::border,
+      status_el | ftxui::dim,
+    }); });
+
+    // Let Enter/Esc work as before. Also forward scroll keys to the scroller
+    // even when the input has focus.
+    return ftxui::CatchEvent(renderer, [&](ftxui::Event e)
+                             {
+    if (e == ftxui::Event::Return) { push_cmd(); return true; }
+    if (e == ftxui::Event::Escape) {
+      std::lock_guard<std::mutex> lk(model.mtx);
+      model.input.clear();
+      return true;
+    }
+    if (e == ftxui::Event::PageDown || e == ftxui::Event::PageUp ||
+        e == ftxui::Event::ArrowDown || e == ftxui::Event::ArrowUp ||
+        e == ftxui::Event::End || e == ftxui::Event::Home) {
+      log_scroller->OnEvent(e);   // let the scroller handle these
+      return true;
+    }
+    return false; });
+  }
+
+  void LogUnsafe_nolock(const std::string &s)
+  {
+    model.log.push_back(s);
+    if (model.log.size() > model.max_lines)
+      model.log.pop_front();
+  }
+}
+
+bool UiPopCommandBlocking(std::string &out)
+{
+  std::unique_lock<std::mutex> lk(model.mtx);
+  cmd_cv.wait(lk, []
+              { return !model.cmdq.empty(); });
+  out = std::move(model.cmdq.front());
+  model.cmdq.pop_front();
+  return true;
+}
+
+// ------------- Public UI API -------------
+void UiStart()
+{
+  static std::thread t([]
+                       {
+    auto root = BuildRoot();
+    running = true;
+    screen.Loop(root);
+    running = false; });
+  t.detach(); // <<< prevent std::terminate() on shutdown
+}
+
+void UiStop()
+{
+  screen.Exit();
+}
+
+void UiLog(const std::string &s)
+{
+  {
+    std::lock_guard<std::mutex> lk(model.mtx);
+    LogUnsafe_nolock(s);
+  }
+  screen.PostEvent(ftxui::Event::Custom);
+}
+
+void UiLogRaw(const std::string &s) { UiLog(s); }
+
+void UiClear()
+{
+  {
+    std::lock_guard<std::mutex> lk(model.mtx);
+    model.log.clear();
+  }
+  screen.PostEvent(ftxui::Event::Custom);
+}
+
+bool UiPopCommand(std::string &out)
+{
+  std::lock_guard<std::mutex> lk(model.mtx);
+  if (model.cmdq.empty())
+    return false;
+  out = std::move(model.cmdq.front());
+  model.cmdq.pop_front();
+  return true;
+}
+
+void UiSetStatus(const std::string &line)
+{
+  {
+    std::lock_guard<std::mutex> lk(model.mtx);
+    model.status = line;
+  }
+  screen.PostEvent(ftxui::Event::Custom);
+}
+
+// ----------------- CLI + printers -----------------
+
 ExamineFlags xFlags;
 int bytesToExamine = 0;
 bool printGLIBC = true;
 
-int Cli(CliFlags *flags)
+// parsed args stash (for x/b)
+static std::optional<uint64_t> g_examine_addr;
+static std::optional<uint64_t> g_break_addr;
+static std::string g_break_desc;
+static bool g_break_save = false;
+
+static void parse_x_command(const std::string &cmd)
 {
-
-    char cmd[100];
-    printf(" > ");
-    int ch;
-
-    fgets(cmd, 100, stdin);
-    clearLine();
-
-    if (!strncmp(cmd, "\n", 1))
+  // syntax: x/[N][g|w|h|b] <addr>
+  xFlags = ExamineFlags::g;
+  int tmpN = bytesToExamine;
+  // parse /Nf if present
+  auto slash = cmd.find('/');
+  if (slash != std::string::npos)
+  {
+    const char *p = cmd.c_str() + slash + 1;
+    int n = 0;
+    char c = 0;
+    if (sscanf(p, "%d%c", &n, &c) >= 1)
     {
-        return 2;
-    }
-    if (!strncmp(cmd, "back", 4))
-    {
-        *flags = CliFlags::printBack;
-        return 1;
-    }
-    if (!strncmp(cmd, "ni", 2))
-    {
-        *flags = CliFlags::ni;
-        return 1;
-    }
-    if (!strncmp(cmd, "reg", 3))
-    {
-        *flags = CliFlags::regV;
-        return 1;
-    }
-    if (!strncmp(cmd, "x", 1))
-    {
-        *flags = CliFlags::examine;
+      if (n > 0)
+        tmpN = n;
+      switch (c)
+      {
+      case 'g':
         xFlags = ExamineFlags::g;
+        break;
+      case 'w':
+        xFlags = ExamineFlags::w;
+        break;
+      case 'h':
+        xFlags = ExamineFlags::h;
+        break;
+      case 'b':
+        xFlags = ExamineFlags::b;
+        break;
+      default:
+        break;
+      }
+    }
+  }
+  bytesToExamine = tmpN;
 
-        char flag;
+  // parse address (last token)
+  std::istringstream iss(cmd);
+  std::string tok, last;
+  while (iss >> tok)
+    last = tok;
+  if (!last.empty())
+  {
+    try
+    {
+      g_examine_addr = std::stoull(last, nullptr, 0);
+    }
+    catch (...)
+    {
+      g_examine_addr.reset();
+    }
+  }
+}
 
-        if (sscanf(&cmd[1], "/%d%c", &bytesToExamine, &flag) != -1)
-        {
+static void parse_b_command(const std::string &cmd)
+{
+  // syntax: b <hex_addr> <desc> [save]
+  g_break_addr.reset();
+  g_break_desc.clear();
+  g_break_save = false;
 
-            switch (flag)
-            {
-            case 'g':
-                xFlags = ExamineFlags::g;
-                break;
-            case 'w':
-                xFlags = ExamineFlags::w;
-                break;
-            case 'h':
-                xFlags = ExamineFlags::h;
-                break;
-            case 'b':
-                xFlags = ExamineFlags::b;
-                break;
-            }
-        }
+  std::istringstream iss(cmd);
+  std::string bcmd, addr_s, desc_s, save_s;
+  iss >> bcmd >> addr_s >> desc_s >> save_s;
+  if (!addr_s.empty())
+  {
+    try
+    {
+      g_break_addr = std::stoull(addr_s, nullptr, 0);
+    }
+    catch (...)
+    {
+      g_break_addr.reset();
+    }
+  }
+  if (!desc_s.empty())
+    g_break_desc = desc_s;
+  if (!save_s.empty())
+    g_break_save = (save_s[0] == 'y' || save_s[0] == 'Y' || save_s[0] == 's' || save_s[0] == 'S');
+}
 
-        return 1;
-    }
-    if (!strncmp(cmd, "flag", 4))
-    {
-        *flags = CliFlags::pFlags;
-        return 1;
-    }
-    if (!strncmp(cmd, "libc on", 7))
-    {
-        *flags = CliFlags::startGLIBCprints;
-    }
-    if (!strncmp(cmd, "libc off", 8))
-    {
-        *flags = CliFlags::stopGLIBCprints;
-    }
-    if (!strncmp(cmd, "b", 1))
-    {
-        *flags = CliFlags::breakpoint;
-        return 1;
-    }
-    if (!strncmp(cmd, "clear", 5))
-    {
-        *flags = CliFlags::clear;
-        return 1;
-    }
-    if (!strncmp(cmd, "c", 1))
-    {
-        *flags = CliFlags::contin;
-        return 1;
-    }
-    if (!strncmp(cmd, "info", 4))
-    {
-        *flags = CliFlags::info;
-        return 1;
-    }
-    if (!strncmp(cmd, "lay", 3))
-    {
-        *flags = CliFlags::lay;
-        return 1;
-    }
-    if (!strncmp(cmd, "starti", 6))
-    {
-        *flags = CliFlags::starti;
-        return 1;
-    }
-    if (!strncmp(cmd, "q", 1))
-    {
-        printf("Exiting Scallop Shell....\n");
-        exit(1);
-    }
+int Cli(CliFlags *out_flags)
+{
+  // Non-blocking: read one command if user typed anything in the FTXUI input.
+  std::string cmd;
+  if (!UiPopCommandBlocking(cmd))
+    return 2; // nothing this frame
 
-    return 0;
+  if (cmd.empty())
+    return 2;
+
+  // Primary matches
+  if (!strncmp(cmd.c_str(), "back", 4))
+  {
+    *out_flags = CliFlags::printBack;
+    return 1;
+  }
+  if (!strncmp(cmd.c_str(), "ni", 2))
+  {
+    *out_flags = CliFlags::ni;
+    return 1;
+  }
+  if (!strncmp(cmd.c_str(), "reg", 3))
+  {
+    *out_flags = CliFlags::regV;
+    return 1;
+  }
+  if (!strncmp(cmd.c_str(), "flag", 4))
+  {
+    *out_flags = CliFlags::pFlags;
+    return 1;
+  }
+  if (!strncmp(cmd.c_str(), "libc on", 7))
+  {
+    *out_flags = CliFlags::startGLIBCprints;
+    return 1;
+  }
+  if (!strncmp(cmd.c_str(), "libc off", 8))
+  {
+    *out_flags = CliFlags::stopGLIBCprints;
+    return 1;
+  }
+  if (!strncmp(cmd.c_str(), "clear", 5))
+  {
+    *out_flags = CliFlags::clear;
+    return 1;
+  }
+  if (!strncmp(cmd.c_str(), "c", 1))
+  {
+    *out_flags = CliFlags::contin;
+    return 1;
+  }
+  if (!strncmp(cmd.c_str(), "info", 4))
+  {
+    *out_flags = CliFlags::info;
+    return 1;
+  }
+  if (!strncmp(cmd.c_str(), "lay", 3))
+  {
+    *out_flags = CliFlags::lay;
+    return 1;
+  }
+  if (!strncmp(cmd.c_str(), "starti", 6))
+  {
+    *out_flags = CliFlags::starti;
+    return 1;
+  }
+  if (!strncmp(cmd.c_str(), "q", 1))
+  {
+    UiLog("Exiting Scallop Shell....");
+    exit(0);
+  }
+
+  if (!strncmp(cmd.c_str(), "x", 1))
+  {
+    parse_x_command(cmd);
+    *out_flags = CliFlags::examine;
+    return 1;
+  }
+
+  if (!strncmp(cmd.c_str(), "b", 1))
+  {
+    parse_b_command(cmd);
+    *out_flags = CliFlags::breakpoint;
+    return 1;
+  }
+
+  // Unrecognized command: ignore for now
+  UiLog(std::string("Unknown command: ") + cmd);
+  return 0;
 }
 
 void spinner()
 {
-
-    static int x = 0;
-
-    static constexpr int delay = 10000;
-
-    switch (x % (4 * delay))
-    {
-    case 0:
-        printf("\b|");
-        fflush(stdout);
-        break;
-    case 1 * delay:
-        printf("\b/");
-        fflush(stdout);
-        break;
-    case 2 * delay:
-        printf("\b-");
-        fflush(stdout);
-        break;
-    case 3 * delay:
-        printf("\b\\");
-        fflush(stdout);
-        break;
-    default:
-        break;
-    }
-    x++;
+  // optional: keep existing behavior (stdout), or convert to UiLog-based animation
 }
 
 void clearLine()
 {
-    // Move the cursor up one line and clear that line:
-    printf("\033[1A"); // Move up one line
-    printf("\033[K");  // Clear from cursor to end of line
+  // No-op under FTXUI to avoid cursor escape codes fighting with the UI.
 }
 
 void printMemMap(int index)
 {
+  if (!memMaps.at(index)->canRun())
+    return;
 
-    if (memMaps.at(index)->canRun())
+  for (auto addr : memMaps.at(index)->addressSpaces)
+  {
+    if (addr.first <= regs.rip && addr.second >= regs.rip)
     {
-        
-        for (auto addr : memMaps.at(index)->addressSpaces) {
-            
-            if (addr.first <= regs.rip && addr.second >= regs.rip) {
-                // If its the top address print the header
-                if (insn[0].address == addr.first)
-                    std::cout << BOLD_GREEN << "\n  #--------" << memMaps.at(index)->desc << "--------#\n\n"
-                            << RESET;
+      if (insn[0].address == addr.first)
+      {
+        UiLog("  #-------- " + memMaps.at(index)->desc + " --------#");
+      }
+      char buf[256];
+      std::snprintf(buf, sizeof(buf),
+                    "\t0x%" PRIx64 ":\t%s\t\t%s",
+                    insn[0].address, insn[0].mnemonic, insn[0].op_str);
+      UiLog(buf);
 
-                // Print the instruction address, instruction and arguments
-                printf("\t%s0x%" PRIx64 ":\t%s\t\t%s\n%s", GREEN, insn[0].address, insn[0].mnemonic,
-                    insn[0].op_str, RESET);
-
-                // If its the bottom addr print the footer
-                if (insn[0].address == addr.second)
-                {
-                    memMaps.at(index)->run++;
-                    std::cout << BOLD_GREEN << "\n  #-------- end of " << memMaps.at(index)->desc << "--------#\n\n"
-                            << RESET;
-                }
-            }
-            
-            
-            
-        }
-        
+      if (insn[0].address == addr.second)
+      {
+        memMaps.at(index)->run++;
+        UiLog("  #-------- end of " + memMaps.at(index)->desc + " --------#");
+      }
     }
+  }
 }
 
 void printBreak(int symbolI)
 {
-
-    // If there's a valid symbol table entry
-    if (symbolI != -1)
-    {
-        // Print the modified instruction with symbols
-        std::cout << BOLD_RED << "  " << symbolTable.at(symbolI).getAddr() << ": " << insn[0].mnemonic << "\t\t" << insn[0].op_str << " |\t<- " << symbolTable.at(symbolI).getDesc() << RESET << "\n";
-        flags = CliFlags::ni;
-    }
-    else
-    {
-        // Check if there's an instruction break
-        if (hasInstrucBreak(insn[0].mnemonic) == 1)
-        {
-            std::cout << BOLD_MAGENTA << "  " << (uint64_t *)insn[0].address << ": " << insn[0].mnemonic << "\t\t" << insn[0].op_str << RESET << "\n";
-            flags = CliFlags::ni;
-            return;
-        }
-    }
+  if (symbolI != -1)
+  {
+    char buf[256];
+    auto raw_addr_ptr = symbolTable.at(symbolI).getAddr();
+    unsigned long long addr_val =
+        static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(raw_addr_ptr));
+    std::snprintf(buf, sizeof(buf), "  0x%016llx:    %s     %s |\t<- %s",
+                  addr_val,
+                  insn[0].mnemonic, insn[0].op_str,
+                  symbolTable.at(symbolI).getDesc().c_str());
+    UiLog(std::string("[BRK] ") + buf);
+    flags = CliFlags::ni;
+    return;
+  }
+  if (hasInstrucBreak(insn[0].mnemonic) == 1)
+  {
+    char buf[256];
+    std::snprintf(buf, sizeof(buf), "  0x%" PRIx64 ":    %s     %s",
+                  (uint64_t)insn[0].address, insn[0].mnemonic, insn[0].op_str);
+    UiLog(std::string("[BRK] ") + buf);
+    flags = CliFlags::ni;
+  }
 }
 
 void printSymbol(int symbolI)
 {
-    // Print the modified instruction with symbols
-    std::cout << BOLD_CYAN << "  " << symbolTable.at(symbolI).getAddr() << ": " << insn[0].mnemonic << "\t\t" << insn[0].op_str << " |\t<- " << symbolTable.at(symbolI).getDesc() << RESET << "\n";
+  char buf[256];
+  auto raw_addr_ptr = symbolTable.at(symbolI).getAddr();
+  unsigned long long addr_val =
+      static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(raw_addr_ptr));
+  std::snprintf(buf, sizeof(buf), "  0x%016llx:    %s     %s |\t<- %s",
+                addr_val,
+                insn[0].mnemonic, insn[0].op_str,
+                symbolTable.at(symbolI).getDesc().c_str());
+  UiLog(std::string("[SYM] ") + buf);
 }
 
 void printBasic()
 {
-    // Print the instruction address, instruction and arguments
-    std::cout << YELLOW << (uint64_t *)insn[0].address << ":\t" << BLUE
-              << insn[0].mnemonic << "\t\t" << MAGENTA << insn[0].op_str << "\n"
-              << RESET;
-}
-
-void printInstructions()
-{
-    int symbolI = hasSymbol(insn[0].address);
-    int mapI = hasLoopSymbol(insn[0].address);
- 
-    
-    if (mapI != -1)
-    {
-        printMemMap(mapI);
-    }
-
-    else if (symbolI != -1)
-    {
-        // Check if the symbol table has any matches
-        if (symbolTable.at(symbolI).getType() == 'b')
-        {
-            printBreak(symbolI);
-        }
-        else if (symbolTable.at(symbolI).getType() == 's')
-        {
-            printSymbol(symbolI);
-        }
-    }
-    else
-    {
-
-        printBreak(symbolI);
-        printBasic();
-    }
+  char buf[256];
+  std::snprintf(buf, sizeof(buf), "0x%" PRIx64 ":    %s     %s",
+                (uint64_t)insn[0].address, insn[0].mnemonic, insn[0].op_str);
+  UiLog(buf);
 }
 
 void printEFlags(uint64_t eflags)
 {
-    // Only the lower 32 bits of EFLAGS are meaningful.
-    printf(BOLD_AMBER "  SET FLAGS - ");
-
-    if (eflags & (1ULL << 0))
-        printf("CF "); // Carry Flag
-    if (eflags & (1ULL << 2))
-        printf("PF "); // Parity Flag
-    if (eflags & (1ULL << 4))
-        printf("AF "); // Auxiliary carry flag
-    if (eflags & (1ULL << 6))
-        printf("ZF "); // Zero Flag
-    if (eflags & (1ULL << 7))
-        printf("SF "); // Sign Flag
-    if (eflags & (1ULL << 8))
-        printf("TF "); // Trap Flag
-    if (eflags & (1ULL << 9))
-        printf("IF "); // Interrupt Enable Flag
-    if (eflags & (1ULL << 10))
-        printf("DF "); // Direction Flag
-    if (eflags & (1ULL << 11))
-        printf("OF "); // Overflow Flag
-
-    printf(RESET "\n");
+  std::string s = "SET FLAGS -";
+  if (eflags & (1ULL << 0))
+    s += " CF";
+  if (eflags & (1ULL << 2))
+    s += " PF";
+  if (eflags & (1ULL << 4))
+    s += " AF";
+  if (eflags & (1ULL << 6))
+    s += " ZF";
+  if (eflags & (1ULL << 7))
+    s += " SF";
+  if (eflags & (1ULL << 8))
+    s += " TF";
+  if (eflags & (1ULL << 9))
+    s += " IF";
+  if (eflags & (1ULL << 10))
+    s += " DF";
+  if (eflags & (1ULL << 11))
+    s += " OF";
+  UiLog(s);
 }
 
 void printRegVerbose()
 {
+  char buf[256];
+  UiLog("#----------------------------- REGISTERS -----------------------------#");
+  std::snprintf(buf, sizeof(buf), "RAX=0x%016llx  RBX=0x%016llx  RCX=0x%016llx  RDX=0x%016llx", regs.rax, regs.rbx, regs.rcx, regs.rdx);
+  UiLog(buf);
+  std::snprintf(buf, sizeof(buf), "RDI=0x%016llx  RSI=0x%016llx  RBP=0x%016llx  RSP=0x%016llx", regs.rdi, regs.rsi, regs.rbp, regs.rsp);
+  UiLog(buf);
+  std::snprintf(buf, sizeof(buf), "RIP=0x%016llx   R8=0x%016llx   R9=0x%016llx   R10=0x%016llx", regs.rip, regs.r8, regs.r9, regs.r10);
+  UiLog(buf);
+  std::snprintf(buf, sizeof(buf), "R11=0x%016llx  R12=0x%016llx  R13=0x%016llx  R14=0x%016llx", regs.r11, regs.r12, regs.r13, regs.r14);
+  UiLog(buf);
+  std::snprintf(buf, sizeof(buf), "R15=0x%016llx  EFLAGS=0x%016llx", regs.r15, regs.eflags);
+  UiLog(buf);
+  printEFlags(regs.eflags);
+  UiLog("#---------------------------------------------------------------------#");
+}
 
-    // Print a decorative line header
-    printf(BOLD_BLACK "#--------------------------------------------------------- REGISTERS ---------------------------------------------------------#\n" RESET);
+void printInstructions()
+{
+  int symbolI = hasSymbol(insn[0].address);
+  int mapI = hasLoopSymbol(insn[0].address);
 
-    // Row 1
-    printf(BOLD_GREEN "%-8s = 0x%016llx   " RESET, "  $RAX", regs.rax);
-    printf(BOLD_CYAN "%-8s = 0x%016llx   " RESET, "$RBX", regs.rbx);
-    printf(BOLD_BLUE "%-8s = 0x%016llx   " RESET, "$RCX", regs.rcx);
-    printf(BOLD_MAGENTA "%-8s = 0x%016llx\n" RESET, "$RDX", regs.rdx);
+  if (mapI != -1)
+  {
+    printMemMap(mapI);
+    return;
+  }
 
-    // Row 2
-    printf(BOLD_GREEN "%-8s = 0x%016llx   " RESET, "  $RDI", regs.rdi);
-    printf(BOLD_CYAN "%-8s = 0x%016llx   " RESET, "$RSI", regs.rsi);
-    printf(BOLD_BLUE "%-8s = 0x%016llx   " RESET, "$RBP", regs.rbp);
-    printf(BOLD_MAGENTA "%-8s = 0x%016llx\n" RESET, "$RSP", regs.rsp);
+  if (symbolI != -1)
+  {
+    if (symbolTable.at(symbolI).getType() == 'b')
+      printBreak(symbolI);
+    else if (symbolTable.at(symbolI).getType() == 's')
+      printSymbol(symbolI);
+    return;
+  }
 
-    // Row 3
-    printf(BOLD_GREEN "%-8s = 0x%016llx   " RESET, "  $RIP", regs.rip);
-    printf(BOLD_CYAN "%-8s = 0x%016llx   " RESET, "$R8", regs.r8);
-    printf(BOLD_BLUE "%-8s = 0x%016llx   " RESET, "$R9", regs.r9);
-    printf(BOLD_MAGENTA "%-8s = 0x%016llx\n" RESET, "$R10", regs.r10);
-
-    // Row 4
-    printf(BOLD_GREEN "%-8s = 0x%016llx   " RESET, "  $R11", regs.r11);
-    printf(BOLD_CYAN "%-8s = 0x%016llx   " RESET, "$R12", regs.r12);
-    printf(BOLD_BLUE "%-8s = 0x%016llx   " RESET, "$R13", regs.r13);
-    printf(BOLD_MAGENTA "%-8s = 0x%016llx\n" RESET, "$R14", regs.r14);
-
-    // Row 5
-    printf(BOLD_GREEN "%-8s = 0x%016llx   " RESET, "  $R15", regs.r15);
-    printf(BOLD_CYAN "%-8s = 0x%016llx\n" RESET, "$EFLAGS", regs.eflags);
-
-    printEFlags(regs.eflags);
-
-    // Print a decorative line footer
-    printf(BOLD_BLACK "#-----------------------------------------------------------------------------------------------------------------------------#\n" RESET);
+  printBreak(symbolI);
+  printBasic();
 }
 
 void handleBacktrace()
 {
-    if (!strncmp(insn[0].mnemonic, "ret", 3))
-    {
-        backtrace.pop();
-    }
-    if (!strncmp(insn[0].mnemonic, "call", 4))
-    {
-        backtrace.push(insn[0].address);
-    }
+  if (!strncmp(insn[0].mnemonic, "ret", 3))
+  {
+    backtrace.pop();
+  }
+  if (!strncmp(insn[0].mnemonic, "call", 4))
+  {
+    backtrace.push(insn[0].address);
+  }
 }
 
-bool moveOn()
-{
-    return (flags == CliFlags::contin);
-}
+bool moveOn() { return (flags == CliFlags::contin); }
 
 int runFlags(int childPID)
 {
-    // Do flag operations
-    switch (flags)
+  switch (flags)
+  {
+  case CliFlags::ni:
+    if (!runCliThisTick)
     {
-    case CliFlags::ni:
-        // If user wants to break at next instruction, break here
-        if (!runCliThisTick)
-        {
-            Cli(&flags);
-
-            if (moveOn() || flags == CliFlags::ni)
-                return -1;
-            else
-                return 0;
-        }
-        break;
-    case CliFlags::contin:
+      Cli(&flags);
+      if (moveOn() || flags == CliFlags::ni)
         return -1;
-        break;
-    case CliFlags::printBack:
-        backtrace.printStack();
-        Cli(&flags);
-        break;
+      return 0;
+    }
+    break;
 
-    case CliFlags::breakpoint:
+  case CliFlags::contin:
+    return -1;
 
-        uint64_t addr;
-        char desc[30];
-        char save[10];
+  case CliFlags::printBack:
+    backtrace.printStack();
+    Cli(&flags);
+    break;
 
-        printf("\taddress  desc  saveToFile?  |  ");
-        scanf("%lx %30s %10s", &addr, desc, save);
-        clearLine();
+  case CliFlags::breakpoint:
+  {
+    if (!g_break_addr.has_value())
+    {
+      UiLog("usage: b <hex_addr> <desc> [save]");
+      Cli(&flags);
+      break;
+    }
+    uint64_t addr = *g_break_addr;
+    const char *desc = g_break_desc.empty() ? "bkpt" : g_break_desc.c_str();
 
-        symbolTable.emplace_back(Symbol(addr, desc, 'b'));
+    symbolTable.emplace_back(Symbol(addr, desc, 'b'));
+    if (g_break_save)
+    {
+      if (FILE *f = fopen("info.txt", "a"))
+      {
+        fprintf(f, "0x%lx %s b\n", addr, desc);
+        fclose(f);
+      }
+    }
+    char buf[128];
+    std::snprintf(buf, sizeof(buf), "breakpoint set at 0x%lx (%s)%s", addr, desc, g_break_save ? " [saved]" : "");
+    UiLog(buf);
+    Cli(&flags);
+    break;
+  }
 
-        if (save[0] == 's')
-        {
-            FILE *symbolFile = fopen("info.txt", "a");
-            fprintf(symbolFile, "0x%lx %s b\n", addr, desc);
-            fclose(symbolFile);
-        }
+  case CliFlags::starti:
+    UiLog("starti not implemented");
+    Cli(&flags);
+    break;
 
-        if (getchar() != EOF)
-            ; // Clears the newline out of the buffer,
-        // which prevents restarting of command
+  case CliFlags::clear:
+    UiClear();
+    Cli(&flags);
+    break;
 
-        Cli(&flags);
+  case CliFlags::info:
+    UiLog("Process ID = " + std::to_string(childPID));
+    Cli(&flags);
+    break;
 
-        break;
-    case CliFlags::starti:
-        // idk what to do here. restart the program but how?
-        break;
-    case CliFlags::clear:
+  case CliFlags::regV:
+    printRegVerbose();
+    Cli(&flags);
+    break;
 
-        system("clear");
-        Cli(&flags);
+  case CliFlags::pFlags:
+    printEFlags(regs.eflags);
+    Cli(&flags);
+    break;
 
-        break;
-    case CliFlags::info:
+  case CliFlags::startGLIBCprints:
+    printGLIBC = true;
+    UiLog("GLIBC prints: ON");
+    Cli(&flags);
+    break;
 
-        std::cout << "Process ID = " << childPID << "\n";
-        Cli(&flags);
+  case CliFlags::stopGLIBCprints:
+    printGLIBC = false;
+    UiLog("GLIBC prints: OFF");
+    Cli(&flags);
+    break;
 
-        break;
-    case CliFlags::regV:
-        printRegVerbose();
-        Cli(&flags);
-        break;
-    case CliFlags::pFlags:
-        printEFlags(regs.eflags);
-        Cli(&flags);
-        break;
-    case CliFlags::startGLIBCprints:
-        printGLIBC = true;
-        Cli(&flags);
-        break;
-    case CliFlags::stopGLIBCprints:
-        printGLIBC = false;
-        Cli(&flags);
-        break;
-    case CliFlags::examine:
+  case CliFlags::examine:
+  {
+    if (!g_examine_addr.has_value())
+    {
+      UiLog("usage: x/[N][g|w|h|b] <hex_addr>");
+      Cli(&flags);
+      break;
+    }
+    uint64_t address = *g_examine_addr;
 
-        uint64_t address = 0;
-        printf(BOLD_BLUE "\tEnter address in hex: " RESET);
+    int unit = 8;
+    switch (xFlags)
+    {
+    case ExamineFlags::g:
+      unit = 8;
+      break;
+    case ExamineFlags::w:
+      unit = 4;
+      break;
+    case ExamineFlags::h:
+      unit = 2;
+      break;
+    case ExamineFlags::b:
+      unit = 1;
+      break;
+    default:
+      break;
+    }
+    int bytesToRead = unit * (bytesToExamine > 0 ? bytesToExamine : 1);
+    int offset = 0;
 
-        if (scanf("%llx", &address) != 1)
-        {
-            printf(RED "ERROR: Invalid input for address.\n\n\n" RESET);
-            while (getchar() != '\n')
-                ;
-            Cli(&flags);
-            break;
-        }
-
-        if (address == 0)
-        {
-            printf(RED "ERROR: Invalid input for address.\n\n\n" RESET);
-            while (getchar() != '\n')
-                ;
-            Cli(&flags);
-            break;
-        }
-
-        // xFlags is assumed to be a variable holding number of bytes to read (1,2,4, or 8).
-        // For demonstration, let’s assume xFlags is defined, or hardcode it:
-        int bytesToRead = (int)xFlags * bytesToExamine; // Change this as needed, or set from xFlags.
-        int offset = 0;
-
-        printf(BOLD_CYAN "\n\t\tData at 0x%lx: ", address);
-
-        while (offset < bytesToRead)
-        {
-            errno = 0; // Clear errno before ptrace call.
-            // Read one word (typically 8 bytes) from the target's address space.
-            long data = ptrace(PTRACE_PEEKDATA, child, (void *)(address + offset), 0);
-            if (data == -1 && errno != 0)
-            {
-                perror("ptrace(PTRACE_PEEKDATA) failed" RESET);
-                while (getchar() != '\n')
-                    ;
-                Cli(&flags);
-                break;
-            }
-
-            // Determine how many bytes to print from this word.
-            int bytesThisWord = sizeof(long);
-            if (offset + bytesThisWord > bytesToRead)
-                bytesThisWord = bytesToRead - offset;
-
-            // Print each byte from the word in little-endian order.
-            for (int j = 0; j < bytesThisWord; j++)
-            {
-                uint8_t byte = (data >> (8 * j)) & 0xFF;
-                printf("%02x ", byte);
-            }
-
-            offset += sizeof(long);
-        }
-        printf(RESET "\n");
-
-        while (getchar() != '\n')
-            ;
-
-        Cli(&flags);
-        break;
+    {
+      char hdr[128];
+      std::snprintf(hdr, sizeof(hdr), "Data at 0x%lx:", address);
+      UiLog(hdr);
     }
 
-    return 0;
+    while (offset < bytesToRead)
+    {
+      errno = 0;
+      long data = ptrace(PTRACE_PEEKDATA, childPID, (void *)(address + offset), 0);
+      if (data == -1 && errno != 0)
+      {
+        UiLog("ptrace(PTRACE_PEEKDATA) failed");
+        break;
+      }
+
+      char line[256];
+      line[0] = 0;
+      std::string s;
+      int bytesThisWord = (int)sizeof(long);
+      if (offset + bytesThisWord > bytesToRead)
+        bytesThisWord = bytesToRead - offset;
+      for (int j = 0; j < bytesThisWord; j++)
+      {
+        uint8_t byte = (data >> (8 * j)) & 0xFF;
+        std::snprintf(line, sizeof(line), "%02x ", byte);
+        s += line;
+      }
+      UiLog(s);
+      offset += (int)sizeof(long);
+    }
+
+    Cli(&flags);
+    break;
+  }
+
+  default:
+    break;
+  }
+
+  return 0;
 }

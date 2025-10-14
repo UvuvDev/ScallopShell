@@ -13,7 +13,6 @@
 
 #include "capstone/capstone.h"
 
-#include "eventhandler.hpp"
 
 /**
  * Watch memory, if memory's changed then return true.

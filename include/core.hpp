@@ -40,7 +40,6 @@
 #include <linux/perf_event.h>
 
 #include "capstone/capstone.h"
-#include "eventhandler.hpp"
 
 // Reset all attributes
 #define RESET "\033[0m"

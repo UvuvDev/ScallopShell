@@ -144,9 +144,12 @@ int assemblyDump(pid_t child)
 
                 printInstructions();
                 handleBacktrace();
+                
+                
 
                 if (hasLoopSymbol(insn[0].address) == -1)
                 {
+
                     while (true)
                     {
                         if (runFlags(child) == -1)
@@ -175,6 +178,8 @@ int assemblyDump(pid_t child)
     // Wait until the child process finishes.
     waitpid(child, &status, 0);
     std::cout << "Child finished execution." << std::endl;
+    
+    UiStop();
 
     return 0;
 }

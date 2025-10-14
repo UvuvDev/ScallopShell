@@ -1,6 +1,38 @@
 #pragma once
 #include "core.hpp"
-#include <iomanip>
+// add to the top of this file (or a shared header)
+#include <string>
+#include <optional>
+#include <sstream>
+#include <cctype>
+#include <cstring>
+
+#include <deque>
+#include <mutex>
+#include <thread>
+#include <atomic>
+
+#include <ftxui/component/component.hpp>
+#include <ftxui/component/screen_interactive.hpp>
+#include <ftxui/dom/elements.hpp>
+
+#include <CLI11/CLI11.hpp>
+
+// gui.hpp (or a shared header)
+extern std::atomic<bool> g_continue_mode;   // true = run freely, false = pause each insn
+extern std::atomic<bool> g_quit;
+
+
+void UiStart();                  // start FTXUI in its own loop
+void UiStop();                   // optional: graceful shutdown
+void UiLog(const std::string&);  // append a line to the instruction panel
+void UiLogRaw(const std::string& s); // same, no post-processing (optional)
+void UiClear();                  // clear the instruction panel
+bool UiPopCommand(std::string&); // non-blocking: get next user command if any
+
+// Optional helpers if you want “status” line or right-side panes later:
+void UiSetStatus(const std::string& line); // single status line under log
+
 
 enum class CliFlags {
     def = 0,

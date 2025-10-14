@@ -1,6 +1,7 @@
 #include "capstone/capstone.h"
 #include "loop.hpp"
 #include "linux/elf.h"
+#include <signal.h>
 
 pid_t child;
 
@@ -62,11 +63,12 @@ void initializeSymbols(char *argv[])
 int main(int argc, char *argv[])
 {
 
-    if (argc != 3) {
+    if (argc != 3)
+    {
         // Display read me, wait for user confirmation to start
         startupMsg();
 
-        printf(BOLD_RED "ERROR: SHOULD HAVE 2 ARGUMENTS, HAS %d. \n\n", argc-1);
+        printf(BOLD_RED "ERROR: SHOULD HAVE 2 ARGUMENTS, HAS %d. \n\n", argc - 1);
 
         return 1;
     }
@@ -99,11 +101,12 @@ int main(int argc, char *argv[])
         perror("execl"); // Only reached if execl fails
         exit(1);
     }
-    
+
     // If parent process...
     else if (child > 0)
     {
-
+        UiStart();
+        
         assemblyDump(child);
     }
     else
