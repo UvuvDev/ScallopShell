@@ -27,7 +27,7 @@ FetchContent_MakeAvailable(ftxui)
 # FetchContent_MakeAvailable(CLI11)
 
 # --- Sources ---
-# Pull in everything under src/, including your UI file(s)
+# Pull in everything under src/
 file(GLOB_RECURSE SCALLOP_SOURCES
      CONFIGURE_DEPENDS
      "${CMAKE_SOURCE_DIR}/src/*.cpp")
@@ -53,10 +53,9 @@ target_link_libraries(scallop PRIVATE
   ftxui::screen
   ${CAPSTONE_LIB}
   Threads::Threads
-  # CLI11::CLI11      # uncomment if you enabled CLI11 above
+  # CLI11::CLI11      # uncomment if enabled CLI11 above
 )
 
-# Helpful warnings (optional)
 if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(scallop PRIVATE -Wall -Wextra -Wpedantic)
 endif()

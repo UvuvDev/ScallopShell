@@ -19,7 +19,6 @@
 #include <ftxui/component/component.hpp>
 #include <ftxui/component/screen_interactive.hpp>
 #include <ftxui/dom/elements.hpp>
-#include <ftxui/component/scroller.hpp>   
 
 // Single global ScreenInteractive
 static ftxui::ScreenInteractive screen = ftxui::ScreenInteractive::Fullscreen();

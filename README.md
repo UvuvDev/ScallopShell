@@ -30,24 +30,24 @@ First download the capstone package. WITHOUT THIS THIS WILL NOT FUNCTION. For me
 sudo dnf install capstone        # Just running the precompiled binary
 sudo dnf install capstone-devel  # Compiling from source
 ```
-But your specific install may vary, check the documentation.
+But your specific install command may vary, check the documentation for YOUR OS / Distro. 
 
-Run this in the terminal: 
+Then, run in the main project directory:
+```bash 
+chmod +x ./build.sh
+./build.sh
+```
 
-g++ -g $(find . -name "*.cpp") -I./include -L./src/ -leventhandler -lcapstone -o scallop
+This will compile it using CMake and do all the linking for you. 
 
-g++                             Compiler
--g                              Enable debug symbols
--$(find . -name "*.cpp")        Compile all files with .cpp
--I./include                     Path for include files
--L./src/                        Path for library files
--leventhandler                  Link the event handler library
--lcapstone                      Link the Capstone Library
--o scallop               Name of the binary
+# Adding to path
 
 If you want to add it to your command line, copy paste this into your .bashrc file (located in ~/)
-
+```bash 
 export PATH=$PATH:~/path/to/package
+```
+You can also just move it to your /usr/bin/. I don't see a downside to this. 
+ 
 ## Importing "Symbols"
 
 You can import symbols for certain addresses. These will be labeled differently than stripped instructions. The more symbols you have the slower the program becomes but that's okay for some extra readability! 
