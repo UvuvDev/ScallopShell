@@ -1,5 +1,13 @@
 
---- ASM DUMP DESCRIPTION ---
+# Scallop Shell - Disassembler, Debugger for Polymorphic code
+
+
+<img width="520" height="520" alt="pixil-frame-0(2)" src="https://github.com/user-attachments/assets/499ccef4-afb0-4c02-888e-1045d65894cb" />
+
+  
+
+
+## --- ASM DUMP DESCRIPTION ---
 
 Dump all instructions that are run by the program into a text file. You can run strings on it to isolate the instructions you want, or remove the ones you don't. This gets past self modifying techniques (like encrypting the instructions one at a time). 
 
