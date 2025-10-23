@@ -1,35 +1,11 @@
 
 # Scallop Shell - Disassembler, Debugger for Polymorphic code
 
-
-<img width="520" height="520" alt="pixil-frame-0(2)" src="https://github.com/user-attachments/assets/499ccef4-afb0-4c02-888e-1045d65894cb" />
+Newly rewritten, currently non-functional pending development. IF YOU ARE LOOKING FOR A FUNCTIONAL VERSION GO TO 948639a AUG 18 2025  
 
   
-
-
-## --- ASM DUMP DESCRIPTION ---
-
-Dump all instructions that are run by the program into a text file. You can run strings on it to isolate the instructions you want, or remove the ones you don't. This gets past self modifying techniques (like encrypting the instructions one at a time). 
-
-Pass in your program as an argument to do a memory dump of it.
-
-Current Functionality:
-
-- Disassemble instruction by instruction
-- Mass comment code via "memory maps"
-- Filter LibC and ld.so code
-- Breakpoints
-- GDB-like CLI
-- Backtracing
-- Assembly dumping into a file
-- Examining memory/registers
-
-Features in Development:
-
-- Jump tracking (a more general backtrace)
-- Watchpoints
-- Automated string/flag memory searching
-- ANGR integration
+  
+<img width="520" height="520" alt="pixil-frame-0(2)" src="https://github.com/user-attachments/assets/499ccef4-afb0-4c02-888e-1045d65894cb" />
 
 # To compile from source 
 
@@ -58,28 +34,7 @@ You can also just move it to your /usr/bin/. I don't see a downside to this.
  
 ## Importing "Symbols"
 
-You can import symbols for certain addresses. These will be labeled differently than stripped instructions. The more symbols you have the slower the program becomes but that's okay for some extra readability! 
-
-- b (for breakpoint)
-- s (for symbol)
-- m (for map)
-- l (for loop)
-
-You have to make a .txt file containing the following format and feed it as a second argument:
-
-......... = one space
-
-Address (in hex).........(NO SPACES AT ALL, max 30 chars)Description..................Symbol_Type
-
-DO NOT HAVE SPACES IN THE DESCRIPTION. I am using scanf("%p %s %c") it will break the entire code. 
-
-If you make the Address 0xF0, it'll allow you to break on every call of the instruction mnemonic (which you use the description for). You still have to write a symbol type, I just use "b" since it's a breakpoint.
-
-Special cases are for "m" and "l", they have extra arguments. 
-
-- For M, you give one extra address after the type which will create a range of addresses that will be commented during runtime
-
-- For L, you give an extra address AND a number specifying how many times you want to display this loop. Useful for when you have a loop repeating hundreds or thousands of times (like encrypting). 0 means it will never print, -1 will make it always print, and anything above 0 will be valid. Otherwise looks like a memory map.
+TBW
 
 ## LibC printing
 
@@ -87,4 +42,4 @@ Scallop Shell will tell you when $RIP is equal to a symbol from LibC and will te
 
 ## Debugging
 
-Use memory maps, breakpoints, and symbols, and also use the "reg" and "flag" commands to print the values of registers and the flags.
+TBW

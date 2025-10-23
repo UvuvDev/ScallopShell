@@ -1,5 +1,2 @@
-output.txt
-prog_asm.s
-info.txt
-perf.data
-perf.data.old
+build/
+compile_commands.json
