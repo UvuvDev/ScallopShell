@@ -6,17 +6,6 @@ using namespace ftxui;
 namespace ScallopUI
 {
 
-    /*===================================================*/
-    /*=                                                 =*/
-    /*=                                                 =*/
-    /*=                                                 =*/
-    /*=                                                 =*/
-    /*=                                                 =*/
-    /*=                                                 =*/    
-    /*=                                                 =*/    
-    /*===================================================*/
-
-
     struct HexEditHistory {
         int row;
         int col;
@@ -29,8 +18,6 @@ namespace ScallopUI
         }
 
     };
-
-
 
     /*===================================================*/
     /*=                                                 =*/
@@ -49,13 +36,10 @@ namespace ScallopUI
         {
         private:
 
-        void begin_edit_if_needed() {
-            if (selectedRow < 0 || selectedColumn < 0) return;
-            editing_ = true;
-            pending_nibble_ = -1;
-            pushed_snapshot_ = false;
-        }
-
+        /**
+         * Commit the nibble, so basically this is what is supposed to set the data equal to what it needs to be.
+         * NOTE FOR LATER - Data seems to be being edited where this is called as well, check this out.
+         */
         void commit_nibble(int v) {
             if (selectedRow < 0 || selectedColumn < 0) return;
             
@@ -91,13 +75,31 @@ namespace ScallopUI
         }
 
 
+        bool handleMouseTakeover(ftxui::Mouse m) {
+
+               // Local (x,y) inside the rendered element:
+                int lx = m.x - mouseBox.x_min - leftmostX;
+                int ly = m.y - mouseBox.y_min - highestY;
+                // Map local coords to your data model:
+                int cell_w = 3; // Each byte is 2 characters + a space
+                int cell_h = 1; // one line per row
+
+                int col = lx / cell_w;
+                int row = (ly / cell_h) + top_row_;
+
+                selectedRow = row;
+                selectedColumn = col;
+                    
+                editing_ = true;
+
+                return true; 
+
+        }
         public:
             Impl(uint8_t *data, size_t size,
                  uint64_t base_addr, int bpr, int rows)
                 : data_(data), size_(size),
                   base_addr_(base_addr), bpr_(bpr), rows_(rows) {
-                    //hex_edit = HexEdit(&hexEditorOpen);
-                    //Add(hex_edit);
                   }
 
         private:
@@ -107,12 +109,12 @@ namespace ScallopUI
             int bpr_;
             int rows_;
             int top_row_ = 0;
-            ftxui::Box mouseBox;
-            int selectedRow = -1;
-            int selectedColumn = -1;
-            int leftmostX = 0x15;
-            int highestY = 2;
-            bool editing_ = false;           // replaces hexEditorOpen
+            ftxui::Box mouseBox; // Box where mouse can be
+            int selectedRow = -1; // Where the mouse is selecting - row
+            int selectedColumn = -1; // Where the mouse is selecting - column
+            int leftmostX = 0x15; // Offset that accounts for the displayed memory addresses pixels
+            int highestY = 2; // Offset that accounts for window border
+            bool editing_ = false;           // Is editing? false = no
             int pending_nibble_ = -1;        // -1 = none, otherwise 0..15
             bool pushed_snapshot_ = false; 
             std::vector<HexEditHistory> hexEditHistory;
@@ -120,6 +122,9 @@ namespace ScallopUI
 
 
             bool Focusable() const override { return true; }
+
+            /*====================================*/
+            /*====================================*/
 
             // All event handling
             bool OnEvent(Event e) override
@@ -164,6 +169,10 @@ namespace ScallopUI
                     }
                     }
                     // Ignore other keys while editing
+                    const auto& m = e.mouse();     
+                    if (m.button == ftxui::Mouse::Left && m.motion == ftxui::Mouse::Pressed) {   
+                        return handleMouseTakeover(m);
+                    }
                     return false;
                 }
                 if (e == Event::ArrowUp)
@@ -213,37 +222,14 @@ namespace ScallopUI
                 
 
                 const auto& m = e.mouse();
-                if (m.button != ftxui::Mouse::Left || m.motion != ftxui::Mouse::Pressed)
-                    return false;
-                
-                    // Local (x,y) inside the rendered element:
-                    int lx = m.x - mouseBox.x_min - leftmostX;
-                    int ly = m.y - mouseBox.y_min - highestY;
-
-                    // Map local coords to your data model:
-                    int cell_w = 3; // Each byte is 2 characters + a space
-                    int cell_h = 1; // one line per row
-
-                    int col = lx / cell_w;
-                    int row = (ly / cell_h) + top_row_;
-
-                    selectedRow = row;
-                    selectedColumn = col;
-                    
-                    editing_ = true;
-
-                    // Zeros byte at selected box
-                    /*if (row >= 0 && row < rows_ && col >= 0 && col < bpr_) {
-                        
-                        hexEditHistory.emplace_back(HexEditHistory{row, col, data_[row*bpr_ + col]});
-
-                        data_[row*bpr_ + col] = 0;
-                    }*/ 
-                    TakeFocus();
-                    return true; 
+                if (m.button == ftxui::Mouse::Left && m.motion == ftxui::Mouse::Pressed)              
+                    return handleMouseTakeover(m);
 
                 return false;
             }
+
+            /*====================================*/
+            /*====================================*/
 
             Element OnRender() override
             {
@@ -270,10 +256,11 @@ namespace ScallopUI
                         size_t idx = start + i;
                         if (idx < size_)
                         {
+                            // Show the data bytes
                             uint8_t b = data_[idx];
                             Element e = text(hex1ByteStr(b)) | color(Color::Magenta); // This is the actual text being displayed
                             
-                            // Dim NULL bytes
+                            // Dim NULL bytes for readability
                             if (b == 0x00)
                                 e = e | dim;
 
@@ -284,7 +271,7 @@ namespace ScallopUI
                                 e = e | bgcolor(Color::Black) | bold;
                             }
 
-                            byte_els.push_back(e);
+                            byte_els.push_back(e); // Add the byte to the list of things to display
                         }
                         else
                         {
@@ -293,12 +280,15 @@ namespace ScallopUI
                         if (i + 1 != bpr_)
                             byte_els.push_back(text(" "));
 
+                        // Meant to add spaces in betweeen the bytes. May come back to later
                         //if ((i+1) % 8 == 0) byte_els.push_back(text(" | "));
                     }
 
+                    // Add the lines to the box that will be displayed.
                     lines.push_back(hbox({addr_el, text(": "), hbox(std::move(byte_els))}));
                 }
 
+                // Final display - add border and focus
                 auto display =  vbox(std::move(lines)) | border | focus;
                 return display | reflect(mouseBox);
             }

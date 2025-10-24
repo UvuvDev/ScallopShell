@@ -1,13 +1,6 @@
 
 TO DO SOON
 
-- Tabbed window where memory display currently sits | DONE
-    - Notepad | DONE
-    - Memory display (name it) | DONE
-    - Hex editor
-    - Code byte editor / display
-
-- Replace placeholder string in the CLI
 - add borders to CLI when deselected
 - start implementing commands like clear
     - add output window for commands

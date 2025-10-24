@@ -32,13 +32,13 @@ export PATH=$PATH:~/path/to/package
 ```
 You can also just move it to your /usr/bin/. I don't see a downside to this. 
  
-## Importing "Symbols"
+## Live Patching
 
-TBW
+One feature of Scallop Shell is live patching in the byte displays. If you want to change any of the bytes in the display, just click on the byte you want to change. Of course, the only values you can enter are 0-9 and A-F. Once you're done patching the bytes, hit enter and it'll save. You can hit Shift+Z to undo the edits you made UNTIL you step to the next instruction. Upon stepping, the live patcher will send a request to the emulator to modify the memory you changed. This then clears the history, so undoing is no longer possible. You can still edit it again of course.
 
-## LibC printing
+## Notepad 
 
-Scallop Shell will tell you when $RIP is equal to a symbol from LibC and will tell you what that symbol is. This is very useful for readability. *Be aware that malware will often jump a few instructions ahead of the target symbol. If you believe it's doing this, you will have to run through LibC itself by commenting the continue statement in asm_dump.cpp through source code modification.* 
+You can take notes on the Notepad tab about what you're working on. Ctrl+S to save. When you open Scallop Shell in the same directory again, it'll open your old notes back up.
 
 ## Debugging
 

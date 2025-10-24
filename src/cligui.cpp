@@ -30,6 +30,7 @@ namespace ScallopUI
     std::vector<std::string> history;
     uint historyMaxLen = 10;
     CLI::App app("Scallop Shell");
+    ftxui::Box mouseBox;
 
     Component InputCli()
     {
@@ -50,12 +51,14 @@ namespace ScallopUI
                     Element e = std::move(s.element);
                     if (s.is_placeholder)
                         e |= dim;
-                    if (s.focused)
+
+                    e |= border;
+                    /*if (s.focused)
                         e |= border;
                     else if (s.hovered)
                         e |= borderRounded;
                     else
-                        e |= borderEmpty;
+                        e |= borderEmpty;*/
                     return e; // no bgcolor/inverted => transparent
                 };
 
@@ -78,6 +81,19 @@ namespace ScallopUI
 
                         return true; 
                     }
+                    if (e == Event::Tab || e == Event::TabReverse) {
+                        return false; // let container handle focus change
+                    }
+                    if (e.is_mouse()) {
+                        if (e.mouse().button == ftxui::Mouse::Left && 
+                            e.mouse().motion == ftxui::Mouse::Pressed && mouseBox.Contain(e.mouse().x, e.mouse().y)) {
+
+                            //TakeFocus();
+                            return true;   // consumed
+                        }
+                        return false;      // let others handle
+                    }
+                    
                     return false; }));
             }
         };
@@ -100,7 +116,7 @@ namespace ScallopUI
             for (int i = history.size() - 1; i >= 0; i--) 
                 lines.push_back(text(history.at(i)));
             
-            return vbox(std::move(lines)) | border | vscroll_indicator | frame;
+            return vbox(std::move(lines)) | border | vscroll_indicator | frame | reflect(mouseBox);
         });
 
     }

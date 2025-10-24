@@ -1,0 +1,2 @@
+- Look into behavior of live patching system - it may not always work after a few tries.
+- Focus is broken, and switching between components is very weird.

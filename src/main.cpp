@@ -12,6 +12,7 @@
 #include "memorydisplay.hpp"
 #include "cligui.hpp"
 #include "notes.hpp"
+#include "disasmdisplay.hpp"
 
 using namespace ftxui;
 
@@ -36,7 +37,7 @@ Component DummyWindowContent(std::vector<uint8_t> &memory_)
   public:
     Impl(std::vector<uint8_t> &memory_)
     {
-      Add({ScallopUI::MemoryDisplay(memory_.data(), memory_.size(), 0, 16)});
+      Add({ScallopUI::MemoryDisplay(memory_.data(), memory_.size(), 0, 8)});
     }
   };
   return Make<Impl>(memory_);
@@ -59,8 +60,8 @@ int main()
     codeMem[i] = (i * 1) & 0xFF;
 
   // auto mem = ScallopUI::MemoryDisplay(memory.data(), memory.size(), 0x7ffff560000, 16, 16);
-  auto mem = DummyWindowContent(memory);
-  auto code = DummyWindowContent(codeMem);
+  auto mem  = ScallopUI::MemoryDisplay(memory.data(), memory.size(), 0, 8);
+  auto code = ScallopUI::MemoryDisplay(codeMem.data(), codeMem.size(), 0, 8);
   auto notes = ScallopUI::Notepad();
 
 
@@ -69,14 +70,20 @@ int main()
   /*================*/
 
 
-  std::vector<std::string> tab_values{
+  std::vector<std::string> tab_names{
       "memory",
       "code",
       "notepad",
   };
   
   int tab_selected = 0;
-  auto tab_toggle = Toggle(&tab_values, &tab_selected);
+  auto tab_toggle = Toggle(&tab_names, &tab_selected);
+
+  tab_toggle = CatchEvent(tab_toggle, [&](Event e){
+    if (!tab_toggle->Focused())
+      return false; // don't consume events if not focused
+    return false;
+  });
 
   auto tab_container = Container::Tab(
       {
@@ -91,33 +98,47 @@ int main()
       tab_container,
   });
 
-  auto renderer = Renderer(container, [&] {
-    return vbox({
-               tab_toggle->Render(),
-               separator(),
-               tab_container->Render(),
-           }) |
-           border;
+  auto left_stack = Container::Vertical({
+    tab_toggle,
+    tab_container,
   });
+
+  auto left_render = Renderer(left_stack, [&] {
+    return vbox({
+            tab_toggle->Render(),
+            separator(),
+            tab_container->Render(),
+          }) | border;
+  });
+  
+  /*===============*/
+
+  auto disasm = ScallopUI::DisasmDisplay();
+  int disasmSize = 100;
+
+  auto right_stack = Container::Vertical({
+    disasm,        // ensure DisasmDisplay() is focusable
+  });
+  auto right_render = Renderer(right_stack, [&] {
+    return disasm->Render();
+  });
+  auto centerTop = ResizableSplitLeft(left_render, right_render, &disasmSize);
 
   /*===============*/
 
+  auto cli_pane = Container::Horizontal({
+    ScallopUI::InputCli(),
+    ScallopUI::CliHistory(),
+  });
 
-
-
-  auto history = ScallopUI::CliHistory();
-  int splitCliMem = 10;
   int splitCliHistory = 90;
+  auto cli_split = ResizableSplitLeft(cli_pane->ChildAt(0), cli_pane->ChildAt(1), &splitCliHistory);
 
-  auto input = ScallopUI::InputCli();
-
-  auto componentA = ResizableSplitLeft(input, history, &splitCliHistory);
-
-  auto componentB = ResizableSplitBottom(componentA, renderer, &splitCliMem);
-
-  //auto FullScreen = ftxui::
+  // Final vertical split: CLI (bottom) vs center (top)
+  int splitCliMem = 10;
+  auto root = ResizableSplitBottom(cli_split, centerTop, &splitCliMem);
 
   // Show it full-screen
-  screen.Loop(componentB);
+  screen.Loop(root);
   return 0;
 }
