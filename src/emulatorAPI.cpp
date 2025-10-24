@@ -31,6 +31,16 @@ std::shared_ptr<uint8_t> Emulator::getMemory(uint64_t address) {
     return nullptr;
 }
 
+uint64_t Emulator::getRegister(std::string register) {
+    
+    return 0;
+}
+
+int Emulator::setRegister(std::string register, uint64_t data) {
+    return 0;
+}
+
+
 std::shared_ptr<std::pair<uint64_t, uint64_t>> Emulator::getInstructionJumpPaths(uint64_t address) {
     address = 0;
     return nullptr;

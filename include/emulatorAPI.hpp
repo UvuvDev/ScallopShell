@@ -32,6 +32,10 @@ public:
 
     static std::shared_ptr<uint8_t> getMemory(uint64_t address);
 
+    static uint64_t getRegister(std::string register);
+
+    static int setRegister(std::string register, uint64_t value);
+
     static std::shared_ptr<std::pair<uint64_t, uint64_t>> getInstructionJumpPaths(uint64_t address);
     
     static int step(int steps = 1);

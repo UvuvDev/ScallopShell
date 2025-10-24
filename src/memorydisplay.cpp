@@ -290,6 +290,10 @@ namespace ScallopUI
 
                 // Final display - add border and focus
                 auto display =  vbox(std::move(lines)) | border | focus;
+
+                if (Focused())
+                    return display | color(Color::Magenta) | reflect(mouseBox);
+
                 return display | reflect(mouseBox);
             }
         };

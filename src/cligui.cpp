@@ -40,12 +40,13 @@ namespace ScallopUI
             std::shared_ptr<std::string> content = std::make_shared<std::string>();
             std::shared_ptr<std::string> placeholder = std::make_shared<std::string>(" > ");
 
+            Component input;
+
             Impl()
             {
                 InputOption opt = InputOption::Default();
                 opt.password = false;
                 opt.placeholder = placeholder.get(); // safe: Impl owns it
-
                 opt.transform = [](InputState s)
                 {
                     Element e = std::move(s.element);
@@ -62,40 +63,64 @@ namespace ScallopUI
                     return e; // no bgcolor/inverted => transparent
                 };
 
-                auto input = Input(content.get(), opt);
+                input = Input(content.get(), opt);
 
-                Add(ftxui::CatchEvent(input, [this](ftxui::Event e)
-                                      {
-                                        
-                    if (e == ftxui::Event::Return) {
-                        std::string line = *content;
-                        history.emplace_back(*content);
-                        content->clear();
-
-                        try {
-                            app.parse(line);
-                        } catch (const CLI::ParseError &pe) {
-                            (void)app.exit(pe);   // returns an int status
-                        }
-                        app.clear(); // Reset Cli
-
-                        return true; 
-                    }
-                    if (e == Event::Tab || e == Event::TabReverse) {
-                        return false; // let container handle focus change
-                    }
-                    if (e.is_mouse()) {
-                        if (e.mouse().button == ftxui::Mouse::Left && 
-                            e.mouse().motion == ftxui::Mouse::Pressed && mouseBox.Contain(e.mouse().x, e.mouse().y)) {
-
-                            //TakeFocus();
-                            return true;   // consumed
-                        }
-                        return false;      // let others handle
-                    }
-                    
-                    return false; }));
+                Add(input);
+                
             }
+
+             bool OnEvent(Event e) override {
+                // Mouse: click to focus (don’t change tabs!)
+                if (e.is_mouse() &&
+                    e.mouse().button == Mouse::Left &&
+                    e.mouse().motion == Mouse::Pressed &&
+                    mouseBox.Contain(e.mouse().x, e.mouse().y)) {
+                    TakeFocus();
+                    return true;  // consume the click
+                }
+
+                // Let the container handle focus traversal
+                if (e == Event::Tab || e == Event::TabReverse /* alias of TabReverse in some builds */)
+                    return false;
+
+                // If not focused, don't eat keys
+                if (!ComponentBase::Focused())
+                    return false;
+
+                // Enter => submit command
+                if (e == Event::Return) {
+                    const std::string line = *content;
+                    history.emplace_back(line);
+                    content->clear();
+
+                    try {
+                    app.parse(line);
+                    } catch (const CLI::ParseError &pe) {
+                    (void)app.exit(pe);  // consume status
+                    }
+                    app.clear();           // reset CLI parser state
+                    return true;
+                }
+
+                // Otherwise, let the inner Input handle typing, arrows, backspace, etc.
+                if (input->OnEvent(e)) return true;
+
+                // Fallback so other decorators/containers still get a chance
+                return ComponentBase::OnEvent(e);
+            }
+
+            bool Focusable() const override { return true; }
+
+            Element OnRender() override {
+                // Render the child input and reflect its box for click-to-focus
+                auto inner = input->Render() | reflect(mouseBox);
+
+                // Always draw a border; highlight when focused
+                return inner
+                    | border
+                    | color(ComponentBase::Focused() ? Color::Magenta : Color::GrayDark);
+            }
+            
         };
 
         return Make<Impl>();
@@ -107,17 +132,30 @@ namespace ScallopUI
     Component CliHistory()
     {
 
-        return Renderer([] {
-            Elements lines;
-            
-            if (history.size() > historyMaxLen) 
-                history.erase(history.begin()); // Keep lines shown to max length
+        struct Impl : ComponentBase {
 
-            for (int i = history.size() - 1; i >= 0; i--) 
-                lines.push_back(text(history.at(i)));
-            
-            return vbox(std::move(lines)) | border | vscroll_indicator | frame | reflect(mouseBox);
-        });
+            Element OnRender() override {
+                Elements lines;
+                
+                if (history.size() > historyMaxLen) 
+                    history.erase(history.begin()); // Keep lines shown to max length
+
+                for (int i = history.size() - 1; i >= 0; i--) 
+                    lines.push_back(text(history.at(i)));
+                
+                
+                auto display = vbox(std::move(lines)) | border | vscroll_indicator | frame | reflect(mouseBox);
+
+                if (Focused()) 
+                    return display | color(Color::Magenta);
+                
+                return display;
+            };
+
+        };
+
+        return Make<Impl>();
+        
 
     }
 

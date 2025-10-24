@@ -68,6 +68,9 @@ namespace ScallopUI {
 
                 auto display = vbox(lines) | border | focus | reflect(renderedArea);
 
+                if (Focused())
+                    return display | color(Color::Magenta);
+
                 return display;
             }
 
