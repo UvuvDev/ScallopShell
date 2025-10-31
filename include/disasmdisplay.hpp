@@ -7,6 +7,7 @@
 #include <ftxui/dom/elements.hpp>
 
 #include "guihelpers.hpp"
+#include "emulatorAPI.hpp"
 
 namespace ScallopUI {
 

@@ -13,35 +13,12 @@
 #include "cligui.hpp"
 #include "notes.hpp"
 #include "disasmdisplay.hpp"
+#include "emulatorAPI.hpp"
 
 using namespace ftxui;
 
-std::string Code(Event event)
-{
-  std::string codes;
-  for (auto &it : event.input())
-  {
-    codes += " " + std::to_string((unsigned int)it);
-  }
-  return codes;
-}
 
-Component DummyWindowContent(std::vector<uint8_t> &memory_)
-{
-  class Impl : public ComponentBase
-  {
-  private:
-    bool checked[3] = {false, false, false};
-    float slider = 50;
 
-  public:
-    Impl(std::vector<uint8_t> &memory_)
-    {
-      Add({ScallopUI::MemoryDisplay(memory_.data(), memory_.size(), 0, 8)});
-    }
-  };
-  return Make<Impl>(memory_);
-}
 
 int main()
 {
@@ -137,6 +114,16 @@ int main()
   // Final vertical split: CLI (bottom) vs center (top)
   int splitCliMem = 10;
   auto root = ResizableSplitBottom(cli_split, centerTop, &splitCliMem);
+
+  Emulator emu;
+  int pid = emu.startEmulation("/home/bradley/Downloads/a.out");
+  if (pid < 0) {
+      std::cerr << "Failed to start QEMU\n";
+  } else {
+    FILE* rizz = fopen("WEGOTIT.TXT", "w+");
+    fwrite("LETS GOOOO", 11, 1, rizz);
+    fclose(rizz);
+  }
 
   // Show it full-screen
   screen.Loop(root);

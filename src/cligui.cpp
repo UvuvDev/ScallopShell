@@ -69,7 +69,7 @@ namespace ScallopUI
                 
             }
 
-             bool OnEvent(Event e) override {
+            bool OnEvent(Event e) override {
                 // Mouse: click to focus (don’t change tabs!)
                 if (e.is_mouse() &&
                     e.mouse().button == Mouse::Left &&

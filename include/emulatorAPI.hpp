@@ -1,3 +1,4 @@
+#pragma once
 #include <stdio.h>
 #include <stdlib.h>
 #include <inttypes.h>
@@ -22,18 +23,33 @@ private:
 
 public:
 
-    static int startEmulation(std::string& executablePath);
+    /**
+     * Start emulating. Currently, QEMU is the only compatible emulator.
+     */
+    static int startEmulation(const std::string& executablePath);
 
     static int addBreakpoint(uint64_t address, std::string& comment);
 
-    static int modifyMemory(uint64_t address, std::shared_ptr<uint8_t> data, int n);
+    /**
+     * Modify the memory from the address given until the address + n. 
+     */
+    static int modifyMemory(uint64_t address, uint8_t* data, int n);
 
     static int ignoreMemory(uint64_t lowAddress, uint64_t highAddress);
 
+    /**
+     * Retrieve memory from an address
+     */
     static std::shared_ptr<uint8_t> getMemory(uint64_t address);
 
+    /**
+     * Get the value of a register
+     */
     static uint64_t getRegister(std::string register);
 
+    /**
+     * Set the value of a register
+     */
     static int setRegister(std::string register, uint64_t value);
 
     static std::shared_ptr<std::pair<uint64_t, uint64_t>> getInstructionJumpPaths(uint64_t address);
