@@ -1,6 +1,10 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <signal.h>
+#include <stdarg.h>
+#include <unistd.h>
 #include "scallop.h"
 
 /* Export version symbol */
@@ -10,6 +14,31 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_version = QEMU_PLUGIN_VERSION;
 char g_mem_path[256] = {0};
 char g_reg_path[256] = {0};
 
+
+static int g_dbg_fd = -1;
+
+void dbg_init_once(void) {
+    if (g_dbg_fd >= 0) return;
+    signal(SIGPIPE, SIG_IGN);                        // never die on EPIPE
+    g_dbg_fd = open("/tmp/branchlog.plugin.log",
+                    O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0644);
+}
+
+void dbg(const char *fmt, ...) {
+  static int fd = -1;
+  if (fd < 0) {
+    signal(SIGPIPE, SIG_IGN);
+    fd = open("/tmp/branchlog.plugin.log", O_WRONLY|O_CREAT|O_APPEND|O_CLOEXEC, 0644);
+  }
+  if (fd < 0) return;
+  char buf[1024];
+  va_list ap; va_start(ap, fmt);
+  int n = vsnprintf(buf, sizeof(buf), fmt, ap);
+  va_end(ap);
+  if (n > 0) write(fd, buf, (n > (int)sizeof(buf) ? (int)sizeof(buf) : n));
+}
+
+
 static void plugin_exit(qemu_plugin_id_t id, void *u){
   (void)id; (void)u;
   control_stop();
@@ -18,8 +47,16 @@ static void plugin_exit(qemu_plugin_id_t id, void *u){
 
 QEMU_PLUGIN_EXPORT
 int qemu_plugin_install(qemu_plugin_id_t id, const qemu_info_t *info, int argc, char **argv){
+
+  
+
   (void)info;
   const char *outfile = NULL;
+
+  dbg_init_once();
+  dbg("[install] pid=%ld\n", (long)getpid());
+
+
 
   for (int i=0;i<argc;i++){
     if (!strncmp(argv[i],"file=",5))        outfile = argv[i]+5;
@@ -34,6 +71,11 @@ int qemu_plugin_install(qemu_plugin_id_t id, const qemu_info_t *info, int argc, 
   g_out = outfile ? fopen(outfile,"w") : stderr;
   if (!g_out){ fprintf(stderr,"[branchlog] failed to open '%s'\n", outfile); g_out = stderr; }
   setvbuf(g_out, NULL, _IOLBF, 0);
+
+  // Debug
+  fprintf(stderr, "[branchlog] plugin install OK (file=%s mem=%s reg=%s)\n",
+        outfile?outfile:"(stderr)", g_mem_path, g_reg_path);
+  fflush(stderr);
 
   fprintf(g_out,"pc,kind,branch_target,fallthrough,tb_vaddr%s\n", g_log_disas?",disas":"");
   fflush(g_out);

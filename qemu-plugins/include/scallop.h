@@ -8,6 +8,19 @@
 #include <glib.h>
 #include "qemu-plugin.h"
 
+
+extern _Atomic unsigned long g_exec_ticks;
+extern _Atomic unsigned long g_last_pc;
+
+#define MAX_VCPUS 64
+typedef struct {
+  atomic_int running;     /* 1 = free-run, 0 = gated */
+  atomic_long tokens;     /* when gated, how many instructions may run */
+  pthread_mutex_t mu;
+  pthread_cond_t  cv;
+} gate_t;
+extern gate_t g_gate[MAX_VCPUS];
+
 /* ---- global config/state exposed across modules ---- */
 extern atomic_int g_logging_enabled;
 extern atomic_uintptr_t g_filter_lo, g_filter_hi;
@@ -83,3 +96,6 @@ extern int   g_log_disas;
 extern char  g_mem_path[256];
 extern char  g_reg_path[256];
 
+void dbg_init_once(void);
+
+void dbg(const char *fmt, ...);

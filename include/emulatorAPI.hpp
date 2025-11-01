@@ -20,6 +20,7 @@ class Emulator {
 private:
 
     std::string binaryPath;
+    static bool isEmulating;
 
 public:
 
@@ -57,5 +58,7 @@ public:
     static int step(int steps = 1);
 
     static std::string disassembleInstruction(uint64_t address, std::shared_ptr<uint8_t> data, int n = 16);
+
+    static bool getIsEmulating();
 
 };

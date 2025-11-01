@@ -6,6 +6,10 @@
 FILE *g_out = NULL;
 int   g_log_disas = 1;
 
+_Atomic unsigned long g_exec_ticks = 0;
+_Atomic unsigned long g_last_pc = 0;
+
+
 static inline const char *safe_disas(struct qemu_plugin_insn *insn){
   const char *s = qemu_plugin_insn_disas(insn);
   return s ? s : "";
@@ -38,22 +42,21 @@ struct exec_ctx {
   const char *disas;
 };
 
-// old:
-// static void insn_exec_cb(qemu_plugin_id_t id, unsigned int vcpu_index, void *udata)
-
 // new:
 static void insn_exec_cb(unsigned int vcpu_index, void *udata)
 {
     struct exec_ctx *ctx = (struct exec_ctx*)udata;
 
-    /* Service mem/regs requests even while paused */
+    // 1) service control requests (mem/regs)
     service_pending_request(vcpu_index);
 
-    /* Gate only when inside filter range */
+    // 2) apply gating (may block)
     gate_wait_if_in_range(vcpu_index, ctx->pc);
 
+    // 3) branch CSV logging (unchanged)
     if (!g_out) return;
     if (!atomic_load_explicit(&g_logging_enabled, memory_order_relaxed)) return;
+
 
     uintptr_t lo = atomic_load(&g_filter_lo), hi = atomic_load(&g_filter_hi);
     if (ctx->pc < lo || ctx->pc > hi) return;

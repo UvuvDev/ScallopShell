@@ -2,15 +2,8 @@
 #include <pthread.h>
 #include "scallop.h"
 
-#define MAX_VCPUS 64
-typedef struct {
-  atomic_int running;     /* 1 = free-run, 0 = gated */
-  atomic_long tokens;     /* when gated, how many instructions may run */
-  pthread_mutex_t mu;
-  pthread_cond_t  cv;
-} gate_t;
 
-static gate_t g_gate[MAX_VCPUS];
+gate_t g_gate[MAX_VCPUS];
 
 atomic_int       g_logging_enabled = 1;
 atomic_uintptr_t g_filter_lo = 0;

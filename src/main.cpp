@@ -125,7 +125,10 @@ int main()
     fclose(rizz);
   }
 
+  while (1) {
+    
+  }
   // Show it full-screen
-  screen.Loop(root);
+  //screen.Loop(root);
   return 0;
 }

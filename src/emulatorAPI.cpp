@@ -156,6 +156,7 @@ bool writeWholeFile(const std::string& path, const uint8_t* data, int n) {
 
 int Emulator::startEmulation(const std::string& executablePath) {
     // ---- hardcoded paths (match your shell snippet) ----
+    const std::string qemuSocket = "/tmp/scallopshell.sock";
     const std::string qemuPath = ( ::getenv("QEMU_BUILD")
         ? std::string(::getenv("QEMU_BUILD")) + "/qemu-x86_64"
         : std::string("/home/bradley/Downloads/qemu/build/qemu-x86_64") );
@@ -189,6 +190,8 @@ int Emulator::startEmulation(const std::string& executablePath) {
 
     // ---- fork/exec QEMU ----
     pid_t pid = ::fork();
+
+    
     if (pid < 0) {
         perror("fork");
         ::close(pipefd[0]); ::close(pipefd[1]);
@@ -196,7 +199,7 @@ int Emulator::startEmulation(const std::string& executablePath) {
     }
     if (pid == 0) {
         // child
-        ::setsid();
+        //::setsid();
         // redirect stdout/stderr to pipe write end
         ::dup2(pipefd[1], STDOUT_FILENO);
         ::dup2(pipefd[1], STDERR_FILENO);
@@ -206,6 +209,18 @@ int Emulator::startEmulation(const std::string& executablePath) {
         perror("execv qemu-x86_64");
         _exit(127);
     }
+
+    // wait up to 10 seconds for /tmp/scallopshell.sock to appear
+    const char* sockPath = "/tmp/scallopshell.sock";
+    for (int i = 0; i < 100; i++) {
+        struct stat st;
+        if (stat(sockPath, &st) == 0 && S_ISSOCK(st.st_mode))
+            break; // socket ready
+        usleep(100000); // 100ms
+    }
+
+    std::cout << "9032483290483209483290432";
+
 
     // parent
     child_pid_ = pid;
@@ -285,9 +300,10 @@ int Emulator::startEmulation(const std::string& executablePath) {
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
 
+
     if (!sock_path_seen.empty()) {
         sock_fd_ = connectWithRetryUnix(sock_path_seen,
-                                        std::chrono::seconds(5),
+                                        std::chrono::seconds(10),
                                         std::chrono::milliseconds(100));
         if (sock_fd_ < 0) {
             perror("connect to plugin socket");
@@ -317,7 +333,7 @@ int Emulator::modifyMemory(uint64_t address, uint8_t* data, int n) {
 
     if (!writeWholeFile(kMemDump, data, n)) return false;
     char cmd[128];
-    std::snprintf(cmd, sizeof(cmd), "set memory 0x%llx;0x%llx",
+    std::snprintf(cmd, sizeof(cmd), "set memory 0x%llx;0x%llx\n",
                   (unsigned long long)address, (unsigned long long)address + n);
     return sendCommandOnce(cmd, &ret);
 
@@ -353,7 +369,7 @@ Emulator::getInstructionJumpPaths(uint64_t address) {
 
 int Emulator::step(int steps) {
     std::string ret;
-    return sendCommandOnce("step " + std::to_string(steps), &ret);
+    return sendCommandOnce("step" + std::to_string(steps) + "\n", &ret);
     return 0;
 }
 
@@ -361,4 +377,8 @@ std::string Emulator::disassembleInstruction(uint64_t address,
                                              std::shared_ptr<uint8_t> data, int n) {
     (void)address; (void)data; (void)n;
     return {};
+}
+
+bool Emulator::getIsEmulating() {
+    return isEmulating;
 }
