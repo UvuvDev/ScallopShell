@@ -69,6 +69,8 @@ static void insn_exec_cb(unsigned int vcpu_index, void *udata)
       fprintf(g_out,"0x%" PRIx64 ",%s,%s0x%" PRIx64 ",0x%" PRIx64 ",0x%" PRIx64 "\n",
         ctx->pc, ctx->kind, (ctx->branch_target?"":""), ctx->branch_target?ctx->branch_target:0,
         ctx->fallthrough, ctx->tb_vaddr);
+
+    dumpReg(NULL);
 }
 
 void tb_trans_cb(qemu_plugin_id_t id, struct qemu_plugin_tb *tb){

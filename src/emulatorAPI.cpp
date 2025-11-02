@@ -418,9 +418,35 @@ std::shared_ptr<uint8_t> Emulator::getMemory(uint64_t address) {
     return nullptr;
 }
 
-uint64_t Emulator::getRegister(std::string reg_name) {
-    (void)reg_name;
-    return 0;
+std::vector<std::string>* Emulator::getRegisters(bool _update) {
+    
+    static bool tryUpdateAgain = false;
+    static std::vector<std::string> registers = {};
+
+    if (_update == false && tryUpdateAgain == false) return &registers;
+    
+    std::fstream regDump("/tmp/regdump.txt");
+    
+    if (!regDump.is_open()) {
+        tryUpdateAgain = true;
+        return &registers;
+    }
+
+
+    tryUpdateAgain = false;
+    // If its told by step() to update, then reparse the regdump
+    registers.clear();
+
+    std::string temp; 
+    while (std::getline(regDump, temp)) {
+        registers.emplace_back(temp);
+    }
+
+    if (registers.empty()) tryUpdateAgain = true;
+
+    regDump.close();
+
+    return &registers;
 }
 
 int Emulator::setRegister(std::string reg_name, uint64_t value) {
@@ -436,8 +462,10 @@ Emulator::getInstructionJumpPaths(uint64_t address) {
 
 int Emulator::step(int steps) {
     std::string ret;
-    return sendCommandOnce("step" + std::to_string(steps) + "\n", &ret);
+    bool exitCode = sendCommandOnce("step" + std::to_string(steps) + "\n", &ret);
+    getRegisters(true); // Send a signal to getRegisters() to update. This keeps it performant
 
+    return exitCode;
 }
 
 int Emulator::continueExec() {

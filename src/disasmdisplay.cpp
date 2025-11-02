@@ -31,7 +31,7 @@ namespace ScallopUI {
                 }
                 if (e == Event::ArrowDown)
                 {
-                    if (bottomRow < min_top)
+                    if (bottomRow < instructionCount)
                         bottomRow++;
                     return true;
                 }

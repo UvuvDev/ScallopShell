@@ -14,6 +14,7 @@
 #include "notes.hpp"
 #include "disasmdisplay.hpp"
 #include "emulatorAPI.hpp"
+#include "registerdisplay.hpp"
 
 using namespace ftxui;
 
@@ -43,6 +44,8 @@ int main()
   auto mem  = ScallopUI::MemoryDisplay(memory.data(), memory.size(), 0, 8);
   auto code = ScallopUI::MemoryDisplay(codeMem.data(), codeMem.size(), 0, 8);
   auto notes = ScallopUI::Notepad();
+  auto regs = ScallopUI::RegisterDisplay();
+
 
 
   /*=================*/
@@ -54,6 +57,7 @@ int main()
       "memory",
       "code",
       "notepad",
+      "regs",
   };
   
   int tab_selected = 0;
@@ -70,6 +74,7 @@ int main()
           mem, 
           code,
           notes,
+          regs,
       },
       &tab_selected);
 

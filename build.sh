@@ -7,7 +7,8 @@ BUILD_DIR="${1:-build}"
 TYPE="${CMAKE_BUILD_TYPE:-Debug}"
 
 # wipe only the out-of-source build dir; keep source tree clean
-rm -rf "$BUILD_DIR"
+rm -f "$BUILD_DIR/*"
+rm -rf "$BUILD_DIR/CMakeFiles"
 
 # ensure no stale in-source cache exists
 rm -f CMakeCache.txt

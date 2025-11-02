@@ -65,8 +65,8 @@ int qemu_plugin_install(qemu_plugin_id_t id, const qemu_info_t *info, int argc, 
     else if (!strncmp(argv[i],"memfile=",8)) snprintf(g_mem_path,sizeof(g_mem_path),"%s",argv[i]+8);
     else if (!strncmp(argv[i],"regfile=",8)) snprintf(g_reg_path,sizeof(g_reg_path),"%s",argv[i]+8);
   }
-  if (!*g_mem_path) snprintf(g_mem_path,sizeof(g_mem_path),"/tmp/branchmem.%ld.txt",(long)getpid());
-  if (!*g_reg_path) snprintf(g_reg_path,sizeof(g_reg_path),"/tmp/branchregs.%ld.txt",(long)getpid());
+  if (!*g_mem_path) snprintf(g_mem_path,sizeof(g_mem_path),"/tmp/memdump.txt");
+  if (!*g_reg_path) snprintf(g_reg_path,sizeof(g_reg_path),"/tmp/regdump.txt");
 
   g_out = outfile ? fopen(outfile,"w") : stderr;
   if (!g_out){ fprintf(stderr,"[branchlog] failed to open '%s'\n", outfile); g_out = stderr; }

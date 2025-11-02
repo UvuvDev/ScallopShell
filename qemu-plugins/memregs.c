@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 #include <errno.h>
 #include <glib.h>
 #include "scallop.h"
@@ -64,6 +65,47 @@ done:
     return out;
 }
 
+void dumpReg(bool* ok)
+{
+    GArray *regs = qemu_plugin_get_registers();
+    if (regs)
+    {
+        const char *path = *g_reg_path ? g_reg_path : "/tmp/branchregs.txt";
+        FILE *f = fopen(path, "w");
+        if (f)
+        {
+            for (guint i = 0; i < regs->len; i++)
+            {
+                qemu_plugin_reg_descriptor *d =
+                    &g_array_index(regs, qemu_plugin_reg_descriptor, i);
+                if (!d->name)
+                    continue;
+                // Read into an empty GByteArray so QEMU sets the true size.
+                GByteArray *val = g_byte_array_new();
+                int got = qemu_plugin_read_register(d->handle, val);
+                if (got > 0 && (guint)got == val->len)
+                {
+                    fprintf(f, "%s=0x", d->name);
+                    for (int j = got - 1; j >= 0; j--)
+                        fprintf(f, "%02x", val->data[j]);
+                    fputc('\n', f);
+                }
+                g_byte_array_free(val, TRUE);
+            }
+            fflush(f);
+            int fd = fileno(f);
+            if (fd >= 0)
+            {
+                fsync(fd);
+            }
+            fclose(f);
+
+            if (ok != NULL) *ok = true;
+        }
+        g_array_free(regs, TRUE);
+    }
+}
+
 void vcpu_init_cb(qemu_plugin_id_t id, unsigned int vcpu_index)
 {
     (void)id;
@@ -125,37 +167,7 @@ void service_pending_request(unsigned vcpu_index)
     }
     else if (r.kind == REQ_GET_REGS)
     {
-        GArray *regs = qemu_plugin_get_registers();
-        if (regs)
-        {
-            const char *path = *g_reg_path ? g_reg_path : "/tmp/branchregs.txt";
-            FILE *f = fopen(path, "w");
-            if (f)
-            {
-                for (guint i = 0; i < regs->len; i++)
-                {
-                    qemu_plugin_reg_descriptor *d =
-                        &g_array_index(regs, qemu_plugin_reg_descriptor, i);
-                    if (!d->name)
-                        continue;
-
-                    GByteArray *val = g_byte_array_sized_new(256);
-                    g_byte_array_set_size(val, 256);
-                    int got = qemu_plugin_read_register(d->handle, val);
-                    if (got > 0)
-                    {
-                        fprintf(f, "%s=0x", d->name);
-                        for (int j = got - 1; j >= 0; j--)
-                            fprintf(f, "%02x", val->data[j]);
-                        fputc('\n', f);
-                    }
-                    g_byte_array_free(val, TRUE);
-                }
-                fclose(f);
-                ok = true;
-            }
-            g_array_free(regs, TRUE);
-        }
+        dumpReg(&ok);
     }
     else if (r.kind == REQ_SET_REGS)
     {
@@ -166,7 +178,7 @@ void service_pending_request(unsigned vcpu_index)
             GArray *regs = qemu_plugin_get_registers();
             if (regs)
             {
-                
+
                 char line[512];
 
                 while (fgets(line, sizeof(line), f))
@@ -243,3 +255,4 @@ void service_pending_request(unsigned vcpu_index)
     pthread_cond_broadcast(&g_req_cv);
     pthread_mutex_unlock(&g_req_mu);
 }
+      

@@ -69,9 +69,9 @@ public:
     static std::shared_ptr<uint8_t> getMemory(uint64_t address);
 
     /**
-     * Get the value of a register
+     * Get the registers
      */
-    static uint64_t getRegister(std::string registerName);
+    static std::vector<std::string>* getRegisters(bool update = false);
 
     /**
      * Set the value of a register

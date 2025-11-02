@@ -11,6 +11,8 @@
 
 extern _Atomic unsigned long g_exec_ticks;
 extern _Atomic unsigned long g_last_pc;
+extern _Atomic int g_peek_pending;
+
 
 #define MAX_VCPUS 64
 typedef struct {
@@ -20,6 +22,7 @@ typedef struct {
   pthread_cond_t  cv;
 } gate_t;
 extern gate_t g_gate[MAX_VCPUS];
+
 
 /* ---- global config/state exposed across modules ---- */
 extern atomic_int g_logging_enabled;
@@ -57,7 +60,8 @@ typedef enum {
     REQ_GET_MEM,
     REQ_SET_MEM,
     REQ_GET_REGS,
-    REQ_SET_REGS
+    REQ_SET_REGS,
+    REQ_PEEK_REGS 
 } req_kind_t;
 
 // ---- shared request object (owned by control/memregs together)
@@ -99,3 +103,5 @@ extern char  g_reg_path[256];
 void dbg_init_once(void);
 
 void dbg(const char *fmt, ...);
+
+void dumpReg(bool* ok);

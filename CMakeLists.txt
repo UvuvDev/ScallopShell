@@ -13,12 +13,22 @@ endif()
 
 # --- FTXUI ---
 include(FetchContent)
-FetchContent_Declare(
-  ftxui
-  GIT_REPOSITORY https://github.com/ArthurSonzogni/FTXUI
-  GIT_TAG        v6.1.9
-)
-FetchContent_MakeAvailable(ftxui)
+
+# --- FTXUI ---
+set(FTXUI_SOURCE_DIR "${CMAKE_BINARY_DIR}/_deps/ftxui-src")
+
+if (NOT EXISTS "${FTXUI_SOURCE_DIR}/CMakeLists.txt")
+  message(STATUS "FTXUI not found — downloading...")
+  FetchContent_Declare(
+    ftxui
+    GIT_REPOSITORY https://github.com/ArthurSonzogni/FTXUI
+    GIT_TAG        v6.1.9
+  )
+  FetchContent_MakeAvailable(ftxui)
+else()
+  message(STATUS "Using cached FTXUI in ${FTXUI_SOURCE_DIR}")
+  add_subdirectory(${FTXUI_SOURCE_DIR} ${CMAKE_BINARY_DIR}/_deps/ftxui-build EXCLUDE_FROM_ALL)
+endif()
 
 # Uncomment if you also want CLI11 (header-only)
 # FetchContent_Declare(
