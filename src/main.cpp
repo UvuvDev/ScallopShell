@@ -26,7 +26,10 @@ int main()
 
   ScallopUI::initCliCommands();
 
+  std::atomic<bool> running = true;
+
   auto screen = ScreenInteractive::Fullscreen();
+  ftxui::ScreenInteractive* g_screen = &screen;
 
   std::vector<uint8_t> memory(1024);
   for (size_t i = 0; i < memory.size(); ++i)
@@ -119,16 +122,21 @@ int main()
   int pid = emu.startEmulation("/home/bradley/Downloads/a.out");
   if (pid < 0) {
       std::cerr << "Failed to start QEMU\n";
-  } else {
-    FILE* rizz = fopen("WEGOTIT.TXT", "w+");
-    fwrite("LETS GOOOO", 11, 1, rizz);
-    fclose(rizz);
   }
 
-  while (1) {
-    
-  }
+
+
+  std::thread([&]{
+    while (running) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(25));
+        if (g_screen) g_screen->PostEvent(ftxui::Event::Custom);
+    }
+  }).detach();
+
+
   // Show it full-screen
-  //screen.Loop(root);
+  screen.Loop(root);
+
+  running = false;
   return 0;
 }

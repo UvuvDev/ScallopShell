@@ -1,27 +1,45 @@
 #include "cligui.hpp"
+#include "emulatorAPI.hpp"
 #include <memory>
 #include <stdlib.h>
 
 using namespace ftxui;
 
-void skibidi()
+enum class LastRunFunction {
+    step,
+    continueExec,
+    dumpMemory
+} lastRunFunction;
+
+void step()
 {
-    FILE *skib = fopen("skibidi.txt", "w+");
-    fwrite("pleaseeeeeeeeeeeee", 1, 10, skib);
-    fclose(skib);
+    lastRunFunction = LastRunFunction::step;
+    Emulator::step(1);
 }
 
-void skibidi2()
+void continueExec()
 {
-    FILE *skib = fopen("skibidi2.txt", "w+");
-    fwrite("pleaseeeeeeeeeeeee", 1, 10, skib);
-    fclose(skib);
+    lastRunFunction = LastRunFunction::continueExec;
+    Emulator::continueExec();
 }
 
-void skibidi3()
-{
-    
-    //ScreenInteractive::Exit();
+void dumpMemory() {
+    lastRunFunction = LastRunFunction::dumpMemory;
+}
+
+void runLastFunc() {
+    switch (lastRunFunction) {
+    case LastRunFunction::step:
+        step();
+        break;
+    case LastRunFunction::continueExec:
+        continueExec();
+        break;
+    case LastRunFunction::dumpMemory:
+        dumpMemory();
+        break;
+
+    }
 }
 
 namespace ScallopUI
@@ -161,14 +179,14 @@ namespace ScallopUI
 
     void initCliCommands()
     {
-        auto help = app.add_subcommand("help", "Parameter");
-        help->callback(skibidi);
+        auto help = app.add_subcommand("step", "Parameter");
+        help->callback(step);
 
-        auto help2 = app.add_subcommand("print", "Parameter");
-        help2->callback(skibidi2);
+        auto help2 = app.add_subcommand("continue", "Parameter");
+        help2->callback(continueExec);
 
-        auto help3 = app.add_subcommand("quit", "Parameter");
-        help3->callback(skibidi3);
+        auto help3 = app.add_subcommand("dump", "Parameter");
+        help3->callback(dumpMemory);
     }
 
 } // namespace ScallopUI

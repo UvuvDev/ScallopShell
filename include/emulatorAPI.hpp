@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <inttypes.h>
+#include <vector>
 #include "memory"
 #include "string"
 
@@ -13,6 +14,30 @@ enum class _EmulType {
 enum class _EmulRetCode {
     SUCCESS = 0,
     ERROR = 1
+};
+
+struct InstructionInfo {
+    std::string instruction;
+    std::string instructionType;
+    uint64_t address;
+    uint64_t throughAddress;
+    uint64_t fallThroughAddress;
+    uint8_t addrTaken;
+
+    InstructionInfo(std::string _instruction, 
+        std::string _instructionType,
+        uint64_t _address,
+        uint64_t _throughAddress,
+        uint64_t _fallThroughAddress,
+        uint8_t _addrTaken) {
+
+            instruction = std::move(_instruction);
+            instructionType = std::move(_instructionType);
+            address = std::move(_address);
+            throughAddress = std::move(_throughAddress);
+            fallThroughAddress = std::move(_fallThroughAddress);
+            addrTaken = std::move(_addrTaken);
+    }
 };
 
 // The class containing the emulator scallop shell runs
@@ -46,18 +71,22 @@ public:
     /**
      * Get the value of a register
      */
-    static uint64_t getRegister(std::string register);
+    static uint64_t getRegister(std::string registerName);
 
     /**
      * Set the value of a register
      */
-    static int setRegister(std::string register, uint64_t value);
+    static int setRegister(std::string registerName, uint64_t value);
 
     static std::shared_ptr<std::pair<uint64_t, uint64_t>> getInstructionJumpPaths(uint64_t address);
     
     static int step(int steps = 1);
 
+    static int continueExec();
+
     static std::string disassembleInstruction(uint64_t address, std::shared_ptr<uint8_t> data, int n = 16);
+
+    static std::vector<InstructionInfo>* getRunInstructions(int line, int n);
 
     static bool getIsEmulating();
 

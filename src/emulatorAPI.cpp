@@ -1,4 +1,5 @@
 #include "emulatorAPI.hpp"
+#include "guihelpers.hpp"
 
 // POSIX
 #include <sys/types.h>
@@ -10,6 +11,8 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <string.h>
+#include <bits/stdc++.h>
+
 
 // C++
 #include <chrono>
@@ -18,6 +21,7 @@
 #include <string>
 #include <iostream>
 #include <fstream>
+#include <filesystem>
 
 int child_pid_ = -1;
 int sock_fd_   = -1;
@@ -26,6 +30,10 @@ static constexpr const char* kSockPath   = "/tmp/scallopshell.sock";
 static constexpr const char* kMemDump    = "/tmp/memdump.txt";
 static constexpr const char* kRegDump    = "/tmp/regdump.txt";
 
+
+bool Emulator::isEmulating = false;
+static std::vector<InstructionInfo> instructionInfo;
+    
 int socket_fd() { return sock_fd_; }
 int pid() { return child_pid_; }
 
@@ -151,6 +159,51 @@ bool writeWholeFile(const std::string& path, const uint8_t* data, int n) {
     return ofs.good();
 }
 
+static std::string trim(std::string s) {
+    size_t a = s.find_first_not_of(" \t\r\n");
+    if (a == std::string::npos) return std::string{};
+    size_t b = s.find_last_not_of(" \t\r\n");
+    return s.substr(a, b - a + 1);
+}
+
+static uint64_t parse_hex(const std::string& s) {
+    std::string t = trim(s);
+    if (t.empty() || t == "0" || t == "0x0") return 0ULL;
+    const char* p = t.c_str();
+    if (t.size() > 2 && t[0] == '0' && (t[1] == 'x' || t[1] == 'X')) p += 2;
+    char* end = nullptr;
+    unsigned long long v = std::strtoull(p, &end, 16);
+    return static_cast<uint64_t>(v);
+}
+
+static std::vector<std::string> parse_csv(const std::string& line) {
+    std::vector<std::string> out;
+    std::string field;
+    bool in_quotes = false;
+    for (size_t i = 0; i < line.size(); ++i) {
+        char c = line[i];
+        if (in_quotes) {
+            if (c == '"') {
+                if (i + 1 < line.size() && line[i + 1] == '"') { field.push_back('"'); ++i; }
+                else { in_quotes = false; }
+            } else field.push_back(c);
+        } else {
+            if (c == '"') in_quotes = true;
+            else if (c == ',') { out.push_back(field); field.clear(); }
+            else field.push_back(c);
+        }
+    }
+    out.push_back(field);
+    return out;
+}
+
+std::fstream& GotoLine(std::fstream& file, unsigned int num){
+    file.seekg(std::ios::beg);
+    for(int i=0; i < num - 1; ++i){
+        file.ignore(std::numeric_limits<std::streamsize>::max(),'\n');
+    }
+    return file;
+}
 
 /*=============== Actual Emulator Functions ===============*/
 
@@ -164,6 +217,10 @@ int Emulator::startEmulation(const std::string& executablePath) {
     const std::string qemuTraceLog = "/home/bradley/SoftDev/ScallopShell/qemu.log";
     const std::string pluginPath   = "/home/bradley/Downloads/qemu/plugins/branchlog.so";
     const std::string csvPath      = "/home/bradley/SoftDev/ScallopShell/branchlog.csv";
+
+    std::ofstream ofs(csvPath,
+                  std::ios::out | std::ios::trunc);
+    ofs.close();
 
     // Clean up previous CSV; we can’t glob /tmp/branchlog.*.sock here, but that’s fine.
     ::unlink(csvPath.c_str());
@@ -218,8 +275,6 @@ int Emulator::startEmulation(const std::string& executablePath) {
             break; // socket ready
         usleep(100000); // 100ms
     }
-
-    std::cout << "9032483290483209483290432";
 
 
     // parent
@@ -307,6 +362,7 @@ int Emulator::startEmulation(const std::string& executablePath) {
                                         std::chrono::milliseconds(100));
         if (sock_fd_ < 0) {
             perror("connect to plugin socket");
+            isEmulating = true;
             // optional: ::kill(child_pid_, SIGTERM);
         }
     } else {
@@ -326,9 +382,20 @@ int Emulator::addBreakpoint(uint64_t address, std::string& comment) {
     return 0;
 }
 
-
 int Emulator::modifyMemory(uint64_t address, uint8_t* data, int n) {
     std::string ret;
+
+    std::string memoryDumpWrite;
+
+    for (int i = 0; i < n/8; i++) {
+        for (int j = 0; j < 8; j++) {
+            memoryDumpWrite += hex1ByteStr(data[i*8 + j]) + ' ';
+        }
+        memoryDumpWrite += '\n';
+    }
+
+    std::ofstream memoryFile("/tmp/memdump.txt", std::ios::out | std::ios::trunc);
+    memoryFile << memoryDumpWrite;
 
 
     if (!writeWholeFile(kMemDump, data, n)) return false;
@@ -370,7 +437,13 @@ Emulator::getInstructionJumpPaths(uint64_t address) {
 int Emulator::step(int steps) {
     std::string ret;
     return sendCommandOnce("step" + std::to_string(steps) + "\n", &ret);
-    return 0;
+
+}
+
+int Emulator::continueExec() {
+    std::string ret;
+    return sendCommandOnce("resume\n", &ret);
+
 }
 
 std::string Emulator::disassembleInstruction(uint64_t address,
@@ -381,4 +454,100 @@ std::string Emulator::disassembleInstruction(uint64_t address,
 
 bool Emulator::getIsEmulating() {
     return isEmulating;
+}
+
+std::vector<InstructionInfo>* Emulator::getRunInstructions(int start_line, int n) {
+    static const char* kCsvPath = "/home/bradley/SoftDev/ScallopShell/branchlog.csv";
+
+    // simple cache of the last request & file state
+    static int cached_start = -1, cached_n = -1;
+    static uintmax_t cached_size = 0;
+    static std::time_t cached_mtime = 0;
+
+    // check file state
+    std::error_code ec;
+    auto sz = std::filesystem::file_size(kCsvPath, ec);
+    std::time_t mt = 0;
+    if (!ec) {
+        std::filesystem::file_time_type ft = std::filesystem::last_write_time(kCsvPath, ec);
+        if (!ec) {
+            auto sctp = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
+                ft - std::filesystem::file_time_type::clock::now()
+                + std::chrono::system_clock::now());
+            mt = std::chrono::system_clock::to_time_t(sctp);
+        }
+    }
+
+    // serve from cache if request & file are unchanged
+    if (cached_start == start_line && cached_n == n && sz == cached_size && mt == cached_mtime) {
+        return &instructionInfo;
+    }
+
+    instructionInfo.clear();
+
+    // open fresh each call (cheap, robust)
+    std::ifstream f(kCsvPath, std::ios::in | std::ios::binary);
+    if (!f) {
+        // file not there yet; keep buffer empty and update cache keys
+        cached_start = start_line; cached_n = n; cached_size = sz; cached_mtime = mt;
+        return &instructionInfo;
+    }
+
+    // read first line (header) and discard it if it isn't a PC like 0x...
+    std::string line;
+    if (std::getline(f, line)) {
+        std::string t = trim(line);
+        bool looks_pc = t.size() >= 3 && t[0] == '0' && (t[1] == 'x' || t[1] == 'X');
+        if (looks_pc) {
+            // header missing; that was actually data → process below by treating it as row 0
+            // Rewind to beginning of file and skip zero lines logic will re-read it.
+            f.clear();
+            f.seekg(0, std::ios::beg);
+        }
+    }
+    // now skip the header line (we already consumed it if it was a true header)
+    // and fast-skip start_line rows
+    int to_skip = start_line;
+    while (to_skip-- > 0 && std::getline(f, line)) {
+        // discard
+    }
+
+    // read up to n data lines
+    int added = 0;
+    while ((n <= 0 || added < n) && std::getline(f, line)) {
+        std::string s = trim(line);
+        if (s.empty()) continue;
+
+        // must be a data row: first column starts with 0x
+        auto cols = parse_csv(s);
+        if (cols.size() < 6) continue;
+        const std::string& c0 = cols[0];
+        if (c0.size() < 3 || !(c0[0] == '0' && (c0[1] == 'x' || c0[1] == 'X'))) continue;
+
+        uint64_t pc  = parse_hex(cols[0]);
+        std::string disType = trim(cols[1]);
+        uint64_t bt  = parse_hex(cols[2]);
+        uint64_t ft  = parse_hex(cols[3]);
+        std::string dis = trim(cols[5]);
+
+        // fallback classify if kind ever blank
+        if (disType.empty()) {
+            size_t i=0; while (i<dis.size() && std::isspace((unsigned char)dis[i])) ++i;
+            size_t j=i; while (j<dis.size() && !std::isspace((unsigned char)dis[j])) ++j;
+            std::string m = dis.substr(i, j-i);
+            for (char& c: m) c = (char)std::tolower((unsigned char)c);
+            if (m == "ret" || m == "retq" || m == "retn" || m == "iret") disType = "ret";
+            else if (m == "jmp" || m == "ljmp") disType = "jmp";
+            else if (m == "call" || m == "callq" || m == "lcall") disType = "call";
+            else if (!m.empty() && m[0]=='j' && m!="jmp") disType = "cond";
+            else disType = "other";
+        }
+
+        instructionInfo.emplace_back(std::move(dis), std::move(disType), pc, bt, ft, bt ? 1u : 0u);
+        ++added;
+    }
+
+    // update cache keys
+    cached_start = start_line; cached_n = n; cached_size = sz; cached_mtime = mt;
+    return &instructionInfo;
 }

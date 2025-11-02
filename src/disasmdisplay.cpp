@@ -1,4 +1,5 @@
 #include "disasmdisplay.hpp"
+#include "emulatorAPI.hpp"
 
 using namespace ftxui;
 
@@ -10,16 +11,12 @@ namespace ScallopUI {
         private:
             int rows;
             int bottomRow = 0;
-            int min_top = 30;
+            int min_top = 37;
+            int instructionCount = 0;
             Box renderedArea;
-            std::vector<std::string> assemblyInstructions;
+            
 
-
-            void initStrings() {
-                for (int i = 1; i <= 100; ++i) {
-                    assemblyInstructions.emplace_back("mov " + std::to_string(i) + ", rax");
-                }
-            }
+            
 
             bool Focusable() const override { return true; }
 
@@ -34,19 +31,10 @@ namespace ScallopUI {
                 }
                 if (e == Event::ArrowDown)
                 {
-                    if (bottomRow < assemblyInstructions.size())
+                    if (bottomRow < min_top)
                         bottomRow++;
                     return true;
                 }
-                /*if (e.is_mouse()) {
-                    if (e.mouse().button == ftxui::Mouse::Left && 
-                        e.mouse().motion == ftxui::Mouse::Pressed && renderedArea.Contain(e.mouse().x, e.mouse().y)) {
-
-                        TakeFocus();
-                        return true;   // consumed
-                    }
-                    return false;      // let others handle
-                }*/
                 
                 
                 return ComponentBase::OnEvent(e); // forward anything else
@@ -56,15 +44,35 @@ namespace ScallopUI {
             Element OnRender() override {
 
                 std::vector<Element> lines;
+                
+                const std::vector<InstructionInfo>* assemblyInstructions = Emulator::getRunInstructions(bottomRow, min_top);
+                instructionCount = assemblyInstructions->size();
 
-                auto header = hbox({text("  Disassembly View")}) | underlined | dim | bold | color(Color::Yellow1);
+                static int lastInstructionCount = 0;
+                
+                auto header = hbox({text("  Disassembly View")}) | underlined | dim | bold | color(Color::CornflowerBlue);
                 lines.push_back(header);
 
-                for (int r = bottomRow; r < assemblyInstructions.size(); r++) {
-                    auto e = text(" - " + assemblyInstructions.at(r) + "\n") | color(Color::Blue);
+                //if (bottomRow + min_top < instructionCount) bottomRow = instructionCount - min_top;
 
-                    lines.emplace_back(hbox(e));
+                for (uint r = 0; r < instructionCount; r++) {
+                    auto e = text(hex8ByteStr(assemblyInstructions->at(r).address)) | color(Color::Magenta);
+
+                    if (assemblyInstructions->at(r).instructionType == "other") 
+                        e = hbox({e, text(" - " + assemblyInstructions->at(r).instruction + "\n") | color(Color::CornflowerBlue)});
+                    else if (assemblyInstructions->at(r).instructionType == "jmp") 
+                        e = hbox({e, text(" - " + assemblyInstructions->at(r).instruction + "\n") | color(Color::Red1)});
+                    else if (assemblyInstructions->at(r).instructionType == "call") 
+                        e = hbox({e, text(" - " + assemblyInstructions->at(r).instruction + "\n") | color(Color::Yellow1)});
+                    else if (assemblyInstructions->at(r).instructionType == "cond") {
+                        e = hbox({e, text(" - " + assemblyInstructions->at(r).instruction + "\n") | color(Color::Orange1)});
+                        //e = hbox({e, text("     took branch -> " +  hex8ByteStr(assemblyInstructions->at(r).addrTaken)) | color(Color::Red1)});
+                    }
+                    lines.emplace_back(e);
                 }
+
+                // Displays instruction count
+                //lines.push_back(hbox(text(std::to_string(instructionCount) + "    " + std::to_string(bottomRow))));
 
                 auto display = vbox(lines) | border | focus | reflect(renderedArea);
 
@@ -78,7 +86,7 @@ namespace ScallopUI {
         public:
 
             Impl() {
-                initStrings();
+                
             }
 
             
