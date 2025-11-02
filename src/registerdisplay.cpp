@@ -10,6 +10,9 @@ namespace ScallopUI {
         class Impl : public ComponentBase {
         private:
 
+
+            Box renderBox;
+
             bool Focusable() const override { return false; }
 
             Element OnRender() override {
@@ -24,14 +27,30 @@ namespace ScallopUI {
                 lines.push_back(header);
 
                 for (uint r = 0; r < registers->size(); r++) {
-                    auto e = text(registers->at(r)) | color(Color::MediumPurple1);
+                    if (r + 1 < registers->size()) {
+                        Element left = text(registers->at(r))
+                                    | color(Color::MediumPurple1)
+                                    | size(WIDTH, EQUAL, 50);
 
-                    lines.emplace_back(e);
-                }
+                        Element mid = separator();
+
+                        // Right column: filler eats remaining space on the left → text ends up at the right edge
+                        Element right = hbox({
+                                        filler(),  // expands
+                                        text(registers->at(r + 1)) | color(Color::Orange1),
+                                        }) | size(WIDTH, EQUAL, 50);
+
+                        lines.emplace_back(hbox({ left, mid, right }));
+                        r++;
+                    } else {
+                        lines.emplace_back(text(registers->at(r)) | color(Color::MediumPurple1));
+                    }
+                    }
 
                 //lines.emplace_back(text("skibidi!!!!") | color(Color::Purple3));
-                auto display = vbox(lines) | border ;
+                auto display = vbox(lines) | border | reflect(renderBox) ;
 
+                
                 return display;
             }
 

@@ -435,14 +435,21 @@ std::vector<std::string>* Emulator::getRegisters(bool _update) {
 
     tryUpdateAgain = false;
     // If its told by step() to update, then reparse the regdump
-    registers.clear();
+    
+
+    std::vector<std::string> registersTemp;
 
     std::string temp; 
     while (std::getline(regDump, temp)) {
-        registers.emplace_back(temp);
+        registersTemp.emplace_back(temp);
     }
 
-    if (registers.empty()) tryUpdateAgain = true;
+    if (registersTemp.empty()) tryUpdateAgain = true;
+    else {
+        registers.clear();
+        registers = registersTemp;
+    }
+
 
     regDump.close();
 

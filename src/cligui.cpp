@@ -46,7 +46,7 @@ namespace ScallopUI
 {
 
     std::vector<std::string> history;
-    uint historyMaxLen = 10;
+    uint historyMaxLen = 6;
     CLI::App app("Scallop Shell");
     ftxui::Box mouseBox;
 
@@ -62,6 +62,7 @@ namespace ScallopUI
 
             Impl()
             {
+                lastRunFunction = LastRunFunction::step;
                 InputOption opt = InputOption::Default();
                 opt.password = false;
                 opt.placeholder = placeholder.get(); // safe: Impl owns it
@@ -108,15 +109,18 @@ namespace ScallopUI
                 // Enter => submit command
                 if (e == Event::Return) {
                     const std::string line = *content;
-                    history.emplace_back(line);
+                    if (line.empty()) runLastFunc();
+                    else history.emplace_back(line);
                     content->clear();
 
                     try {
                     app.parse(line);
                     } catch (const CLI::ParseError &pe) {
                     (void)app.exit(pe);  // consume status
+                    
                     }
                     app.clear();           // reset CLI parser state
+
                     return true;
                 }
 
@@ -179,8 +183,9 @@ namespace ScallopUI
 
     void initCliCommands()
     {
-        auto help = app.add_subcommand("step", "Parameter");
-        help->callback(step);
+        auto stepCmd = app.add_subcommand("step", "Parameter");
+        stepCmd->callback(step);
+        
 
         auto help2 = app.add_subcommand("continue", "Parameter");
         help2->callback(continueExec);
