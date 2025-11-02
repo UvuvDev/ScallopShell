@@ -8,13 +8,14 @@ using namespace ftxui;
 enum class LastRunFunction {
     step,
     continueExec,
-    dumpMemory
+    dumpMemory,
+    focusMemory,
 } lastRunFunction;
 
-void step()
+void step(int n = 1)
 {
     lastRunFunction = LastRunFunction::step;
-    Emulator::step(1);
+    Emulator::step(n);
 }
 
 void continueExec()
@@ -25,6 +26,11 @@ void continueExec()
 
 void dumpMemory() {
     lastRunFunction = LastRunFunction::dumpMemory;
+}
+
+void focusMemory(uint64_t low, uint64_t high)  {
+    lastRunFunction = LastRunFunction::focusMemory;
+    Emulator::focusMemory(low, high);
 }
 
 void runLastFunc() {
@@ -38,7 +44,9 @@ void runLastFunc() {
     case LastRunFunction::dumpMemory:
         dumpMemory();
         break;
-
+    case LastRunFunction::focusMemory:
+        // We can ignore this to be honest
+        break;
     }
 }
 
@@ -183,14 +191,38 @@ namespace ScallopUI
 
     void initCliCommands()
     {
-        auto stepCmd = app.add_subcommand("step", "Parameter");
-        stepCmd->callback(step);
-        
+        int n = 1;
+        auto stepCmd = app.add_subcommand("step", "Execute N CPU steps");
+        stepCmd
+            ->add_option("n", n, "Number of steps")
+            ->expected(0, 1)                 // allow 0 or 1 positional arguments
+            ->check(CLI::PositiveNumber);    // or CLI::Range(1, 1'000'000)
 
-        auto help2 = app.add_subcommand("continue", "Parameter");
-        help2->callback(continueExec);
+        stepCmd->callback([&](){
+            step(n); // pass the parsed value (or default) into step()
+        });
 
-        auto help3 = app.add_subcommand("dump", "Parameter");
+
+      
+        auto continCmd = app.add_subcommand("continue", "Run program until breakpoint or program exit");
+        continCmd->callback(dumpMemory);
+
+
+        uint64_t low, high;
+        auto focusMem = app.add_subcommand("focus", "Filter out all code outside of this range");
+        focusMem
+            ->add_option("low", low, "Low addr")
+            ->expected(1)                 
+            ->check(CLI::PositiveNumber);    // or CLI::Range(1, 1'000'000)
+        focusMem
+            ->add_option("high", high, "high addr")
+            ->expected(1)                 
+            ->check(CLI::PositiveNumber);    // or CLI::Range(1, 1'000'000)
+        focusMem->callback([&](){
+            focusMemory(low, high); // pass the parsed value (or default) into step()
+        });
+
+        auto help3 = app.add_subcommand("dump", "Dump memory");
         help3->callback(dumpMemory);
     }
 

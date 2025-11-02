@@ -61,7 +61,7 @@ public:
      */
     static int modifyMemory(uint64_t address, uint8_t* data, int n);
 
-    static int ignoreMemory(uint64_t lowAddress, uint64_t highAddress);
+    static int focusMemory(uint64_t lowAddress, uint64_t highAddress);
 
     /**
      * Retrieve memory from an address
@@ -86,7 +86,7 @@ public:
 
     static std::string disassembleInstruction(uint64_t address, std::shared_ptr<uint8_t> data, int n = 16);
 
-    static std::vector<InstructionInfo>* getRunInstructions(int line, int n);
+    static std::vector<InstructionInfo>* getRunInstructions(int line, int n, int* updated);
 
     static bool getIsEmulating();
 

@@ -21,8 +21,6 @@ namespace ScallopUI {
                 
                 const std::vector<std::string>* registers = Emulator::getRegisters();
 
-                static int lastInstructionCount = 0;
-                
                 auto header = hbox({text("  Register View")}) | underlined | dim | bold | color(Color::SeaGreen1);
                 lines.push_back(header);
 

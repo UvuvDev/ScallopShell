@@ -199,7 +199,7 @@ static std::vector<std::string> parse_csv(const std::string& line) {
 
 std::fstream& GotoLine(std::fstream& file, unsigned int num){
     file.seekg(std::ios::beg);
-    for(int i=0; i < num - 1; ++i){
+    for(uint i=0; i < num - 1; ++i){
         file.ignore(std::numeric_limits<std::streamsize>::max(),'\n');
     }
     return file;
@@ -408,9 +408,10 @@ int Emulator::modifyMemory(uint64_t address, uint8_t* data, int n) {
     return 0;
 }
 
-int Emulator::ignoreMemory(uint64_t lowAddress, uint64_t highAddress) {
-    (void)lowAddress; (void)highAddress;
-    return 0;
+int Emulator::focusMemory(uint64_t lowAddress, uint64_t highAddress) {
+    std::string ret;
+    bool exitCode = sendCommandOnce(std::to_string(lowAddress) + ';' + std::to_string(highAddress) + '\n', &ret);
+    return exitCode;
 }
 
 std::shared_ptr<uint8_t> Emulator::getMemory(uint64_t address) {
@@ -491,7 +492,7 @@ bool Emulator::getIsEmulating() {
     return isEmulating;
 }
 
-std::vector<InstructionInfo>* Emulator::getRunInstructions(int start_line, int n) {
+std::vector<InstructionInfo>* Emulator::getRunInstructions(int start_line, int n, int* updated) {
     static const char* kCsvPath = "/home/bradley/SoftDev/ScallopShell/branchlog.csv";
 
     // simple cache of the last request & file state
@@ -503,7 +504,7 @@ std::vector<InstructionInfo>* Emulator::getRunInstructions(int start_line, int n
     std::error_code ec;
     auto sz = std::filesystem::file_size(kCsvPath, ec);
     std::time_t mt = 0;
-    if (!ec) {
+    if (ec) {
         std::filesystem::file_time_type ft = std::filesystem::last_write_time(kCsvPath, ec);
         if (!ec) {
             auto sctp = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
@@ -515,6 +516,7 @@ std::vector<InstructionInfo>* Emulator::getRunInstructions(int start_line, int n
 
     // serve from cache if request & file are unchanged
     if (cached_start == start_line && cached_n == n && sz == cached_size && mt == cached_mtime) {
+        *updated = 0;
         return &instructionInfo;
     }
 
@@ -527,6 +529,9 @@ std::vector<InstructionInfo>* Emulator::getRunInstructions(int start_line, int n
         cached_start = start_line; cached_n = n; cached_size = sz; cached_mtime = mt;
         return &instructionInfo;
     }
+
+    // Alert the caller that there's new instructions
+    if (updated != nullptr) *updated = true;
 
     // read first line (header) and discard it if it isn't a PC like 0x...
     std::string line;
@@ -582,6 +587,7 @@ std::vector<InstructionInfo>* Emulator::getRunInstructions(int start_line, int n
         ++added;
     }
 
+    *updated = added;
     // update cache keys
     cached_start = start_line; cached_n = n; cached_size = sz; cached_mtime = mt;
     return &instructionInfo;

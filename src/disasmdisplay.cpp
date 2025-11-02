@@ -44,18 +44,19 @@ namespace ScallopUI {
             Element OnRender() override {
 
                 std::vector<Element> lines;
+                static int hasUpdated = false;
                 
-                const std::vector<InstructionInfo>* assemblyInstructions = Emulator::getRunInstructions(bottomRow, min_top);
-                instructionCount = assemblyInstructions->size();
 
-                static int lastInstructionCount = 0;
+                //if (hasUpdated > 0) { bottomRow = hasUpdated; }
+
+                const std::vector<InstructionInfo>* assemblyInstructions = Emulator::getRunInstructions(bottomRow, min_top, &hasUpdated);
+
+                instructionCount = assemblyInstructions->size();
                 
                 auto header = hbox({text("  Disassembly View")}) | underlined | dim | bold | color(Color::CornflowerBlue);
                 lines.push_back(header);
 
-                //if (bottomRow + min_top < instructionCount) bottomRow = instructionCount - min_top;
-
-                for (uint r = 0; r < instructionCount; r++) {
+                for (int r = 0; r < instructionCount; r++) {
                     auto e = text(hex8ByteStr(assemblyInstructions->at(r).address)) | color(Color::Magenta);
 
                     if (assemblyInstructions->at(r).instructionType == "other") 
@@ -64,15 +65,13 @@ namespace ScallopUI {
                         e = hbox({e, text(" - " + assemblyInstructions->at(r).instruction + "\n") | color(Color::Red1)});
                     else if (assemblyInstructions->at(r).instructionType == "call") 
                         e = hbox({e, text(" - " + assemblyInstructions->at(r).instruction + "\n") | color(Color::Yellow1)});
-                    else if (assemblyInstructions->at(r).instructionType == "cond") {
+                    else if (assemblyInstructions->at(r).instructionType == "cond") 
                         e = hbox({e, text(" - " + assemblyInstructions->at(r).instruction + "\n") | color(Color::Orange1)});
+                    else if (assemblyInstructions->at(r).instructionType == "ret") 
+                        e = hbox({e, text(" - " + assemblyInstructions->at(r).instruction + "\n") | color(Color::MediumPurple1)});
                         //e = hbox({e, text("     took branch -> " +  hex8ByteStr(assemblyInstructions->at(r).addrTaken)) | color(Color::Red1)});
-                    }
                     lines.emplace_back(e);
                 }
-
-                // Displays instruction count
-                //lines.push_back(hbox(text(std::to_string(instructionCount) + "    " + std::to_string(bottomRow))));
 
                 auto display = vbox(lines) | border | focus | reflect(renderedArea);
 
