@@ -5,6 +5,8 @@
 
 using namespace ftxui;
 
+std::vector<int> lastRunArgs;
+
 enum class LastRunFunction {
     step,
     continueExec,
@@ -16,27 +18,32 @@ void step(int n = 1)
 {
     lastRunFunction = LastRunFunction::step;
     Emulator::step(n);
+    lastRunArgs.clear();
+    lastRunArgs.emplace_back(n);
 }
 
 void continueExec()
 {
     lastRunFunction = LastRunFunction::continueExec;
     Emulator::continueExec();
+    lastRunArgs.clear();
 }
 
 void dumpMemory() {
     lastRunFunction = LastRunFunction::dumpMemory;
+    lastRunArgs.clear();
 }
 
 void focusMemory(uint64_t low, uint64_t high)  {
     lastRunFunction = LastRunFunction::focusMemory;
     Emulator::focusMemory(low, high);
+    lastRunArgs.clear();
 }
 
 void runLastFunc() {
     switch (lastRunFunction) {
     case LastRunFunction::step:
-        step();
+        step(lastRunArgs.at(0));
         break;
     case LastRunFunction::continueExec:
         continueExec();
@@ -191,15 +198,18 @@ namespace ScallopUI
 
     void initCliCommands()
     {
-        int n = 1;
+        static int n;
         auto stepCmd = app.add_subcommand("step", "Execute N CPU steps");
         stepCmd
             ->add_option("n", n, "Number of steps")
             ->expected(0, 1)                 // allow 0 or 1 positional arguments
+            ->default_val("1")
             ->check(CLI::PositiveNumber);    // or CLI::Range(1, 1'000'000)
 
         stepCmd->callback([&](){
+
             step(n); // pass the parsed value (or default) into step()
+            n = 1;
         });
 
 
