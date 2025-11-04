@@ -13,10 +13,7 @@ namespace ScallopUI {
             int bottomRow = 0;
             int min_top = 37;
             int instructionCount = 0;
-            Box renderedArea;
-            
-
-            
+            Box renderedArea;           
 
             bool Focusable() const override { return true; }
 

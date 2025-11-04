@@ -71,7 +71,7 @@ public:
     /**
      * Get the registers
      */
-    static std::vector<std::string>* getRegisters(bool update = false);
+    static std::vector<std::string>* getRegisters(bool update = false, int targetMods = -1);
 
     /**
      * Set the value of a register

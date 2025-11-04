@@ -444,13 +444,19 @@ std::shared_ptr<uint8_t> Emulator::getMemory(uint64_t address) {
     return nullptr;
 }
 
-std::vector<std::string>* Emulator::getRegisters(bool _update) {
+std::vector<std::string>* Emulator::getRegisters(bool _update, int targetMods) {
     
     static bool tryUpdateAgain = false;
+    static int modificationsMade = 0;
+    static int targetModifications = 0;
     static std::vector<std::string> registers = {};
+
+    
 
     if (_update == false && tryUpdateAgain == false) return &registers;
     
+    if (targetMods != -1) targetModifications = targetMods;
+
     std::fstream regDump("/tmp/regdump.txt");
     
     if (!regDump.is_open()) {
@@ -458,11 +464,16 @@ std::vector<std::string>* Emulator::getRegisters(bool _update) {
         return &registers;
     }
 
+    if (modificationsMade >= targetModifications) {
+        tryUpdateAgain = false;
+        modificationsMade = 0;
+        targetModifications = 0;
+    }
+    else {
+        tryUpdateAgain = true;
+    }
 
-    tryUpdateAgain = false;
     // If its told by step() to update, then reparse the regdump
-    
-
     std::vector<std::string> registersTemp;
 
     std::string temp; 
@@ -474,6 +485,7 @@ std::vector<std::string>* Emulator::getRegisters(bool _update) {
     else {
         registers.clear();
         registers = registersTemp;
+        modificationsMade++;
     }
 
 
@@ -496,7 +508,7 @@ Emulator::getInstructionJumpPaths(uint64_t address) {
 int Emulator::step(int steps) {
     std::string ret;
     bool exitCode = sendCommandOnce("step" + std::to_string(steps) + "\n", &ret);
-    getRegisters(true); // Send a signal to getRegisters() to update. This keeps it performant
+    getRegisters(true, steps); // Send a signal to getRegisters() to update. This keeps it performant
 
     return exitCode;
 }
