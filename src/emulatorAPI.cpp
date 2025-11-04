@@ -207,7 +207,7 @@ std::fstream& GotoLine(std::fstream& file, unsigned int num){
 
 /*=============== Actual Emulator Functions ===============*/
 
-int Emulator::startEmulation(const std::string& executablePath) {
+int Emulator::startEmulation(const std::string& executablePathArg) {
     // ---- hardcoded paths (match your shell snippet) ----
     const std::string qemuSocket = "/tmp/scallopshell.sock";
     const std::string qemuPath = ( ::getenv("QEMU_BUILD")
@@ -218,22 +218,44 @@ int Emulator::startEmulation(const std::string& executablePath) {
     const std::string pluginPath   = "/home/bradley/Downloads/qemu/plugins/branchlog.so";
     const std::string csvPath      = "/home/bradley/SoftDev/ScallopShell/branchlog.csv";
 
+    static std::string executablePath = executablePathArg;
+
     std::ofstream ofs(csvPath,
                   std::ios::out | std::ios::trunc);
     ofs.close();
 
+    if (child_pid_ != -1) kill(child_pid_, SIGKILL); // Kill the child process
+
     // Clean up previous CSV; we can’t glob /tmp/branchlog.*.sock here, but that’s fine.
     ::unlink(csvPath.c_str());
 
+
+
     // ---- build argv: qemu -d plugin -D <log> -plugin <.so> -- <target> ----
-    std::vector<std::string> args_str = {
+    std::vector<std::string> args_str;
+    
+
+    if (executablePathArg == "") {
+        args_str = {
         qemuPath,
         "-d", "plugin",
         "-D", qemuTraceLog,
         "-plugin", pluginPath,
         "--",
-        executablePath
-    };
+        executablePath };
+    }
+    else {
+        args_str = {
+        qemuPath,
+        "-d", "plugin",
+        "-D", qemuTraceLog,
+        "-plugin", pluginPath,
+        "--",
+        executablePath };
+
+        executablePath = executablePathArg;
+    }
+
     std::vector<char*> argv; argv.reserve(args_str.size()+1);
     for (auto& s : args_str) argv.push_back(const_cast<char*>(s.c_str()));
     argv.push_back(nullptr);
@@ -266,6 +288,9 @@ int Emulator::startEmulation(const std::string& executablePath) {
         perror("execv qemu-x86_64");
         _exit(127);
     }
+
+    child_pid_ = pid;
+
 
     // wait up to 10 seconds for /tmp/scallopshell.sock to appear
     const char* sockPath = "/tmp/scallopshell.sock";

@@ -1,13 +1,15 @@
 
 # Scallop Shell - Disassembler, Debugger for Polymorphic code
 
-Newly rewritten, currently non-functional pending development. IF YOU ARE LOOKING FOR A FUNCTIONAL VERSION GO TO 948639a AUG 18 2025  
-
-  
+Newly rewritten, currently semi-functional pending development. IF YOU ARE LOOKING FOR A FUNCTIONAL VERSION GO TO 948639a AUG 18 2025  
   
 <img width="520" height="520" alt="pixil-frame-0(2)" src="https://github.com/user-attachments/assets/499ccef4-afb0-4c02-888e-1045d65894cb" />
 
-# To compile from source 
+## Motivation
+
+GDB, pwndbg, Ghidra, IDA, 
+
+## To compile from source 
 
 First download the capstone package. WITHOUT THIS THIS WILL NOT FUNCTION. For me in Fedora, it'll be:
 ```bash
@@ -24,7 +26,7 @@ chmod +x ./build.sh
 
 This will compile it using CMake and do all the linking for you. 
 
-# Adding to path
+## Adding to path
 
 If you want to add it to your command line, copy paste this into your .bashrc file (located in ~/)
 ```bash 
@@ -42,4 +44,6 @@ You can take notes on the Notepad tab about what you're working on. Ctrl+S to sa
 
 ## Debugging
 
-TBW
+You can run "step N", with N being the amount of instructions you want to step (this can be left blank for a default of 1). the "focus" command will filter out all memory outside of the low and high argument you specify (for example, "focus 0x400000 0x500000" will only output the instructions inside that range). Hitting enter will run the last command. 
+
+Scallop Shell shows you the instruction right before it runs. So if you want to patch anything before it runs it'll let you. 

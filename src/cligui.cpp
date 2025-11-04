@@ -40,6 +40,10 @@ void focusMemory(uint64_t low, uint64_t high)  {
     lastRunArgs.clear();
 }
 
+void resetEmulator() {
+    Emulator::startEmulation("");
+}
+
 void runLastFunc() {
     switch (lastRunFunction) {
     case LastRunFunction::step:
@@ -234,6 +238,9 @@ namespace ScallopUI
 
         auto help3 = app.add_subcommand("dump", "Dump memory");
         help3->callback(dumpMemory);
+
+        auto reset = app.add_subcommand("reset");
+        reset->callback(resetEmulator);
     }
 
 } // namespace ScallopUI
