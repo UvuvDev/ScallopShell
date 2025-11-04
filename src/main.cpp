@@ -32,17 +32,10 @@ int main()
   auto screen = ScreenInteractive::Fullscreen();
   ftxui::ScreenInteractive* g_screen = &screen;
 
-  std::vector<uint8_t> memory(1024);
-  for (size_t i = 0; i < memory.size(); ++i)
-    memory[i] = (i * 17) & 0xFF;
-
-  std::vector<uint8_t> codeMem(1024);
-  for (size_t i = 0; i < codeMem.size(); ++i)
-    codeMem[i] = (i * 1) & 0xFF;
-
   // auto mem = ScallopUI::MemoryDisplay(memory.data(), memory.size(), 0x7ffff560000, 16, 16);
-  auto mem  = ScallopUI::MemoryDisplay(memory.data(), memory.size(), 0, 8);
-  auto code = ScallopUI::MemoryDisplay(codeMem.data(), codeMem.size(), 0, 8);
+  const int memoryRange = 0x1000;
+  auto mem  = ScallopUI::MemoryDisplay(Emulator::getMemory(0xdeadbeef, 0x1000, true), memoryRange, 0, 8);
+  auto code  = ScallopUI::MemoryDisplay(Emulator::getMemory(0xfadf00b, 0x1000, true), memoryRange, 0, 8);
   auto notes = ScallopUI::Notepad();
   auto regs = ScallopUI::RegisterDisplay();
 
@@ -111,8 +104,9 @@ int main()
 
   /*===============*/
 
+  auto cli_input = ScallopUI::InputCli();
   auto cli_pane = Container::Horizontal({
-    ScallopUI::InputCli(),
+    cli_input,
     ScallopUI::CliHistory(),
   });
 
@@ -138,6 +132,15 @@ int main()
     }
   }).detach();
 
+
+  root = CatchEvent(root, [&](const Event& e) {
+    // Example: focus CLI on Ctrl key press
+    if (e == Event::CtrlA) {
+        cli_input->TakeFocus();
+        return true;  // consume
+    }
+    return false;     // let others handle it
+  });
 
   // Show it full-screen
   screen.Loop(root);

@@ -236,6 +236,8 @@ static void *ctrl_loop(void *arg)
             {
                 dprintf(cfd, "err bad_args\n");
                 close(cfd);
+                g_req.hi = 0;
+                g_req.lo = 0;
                 continue;
             }
             *semi = 0;
@@ -246,6 +248,8 @@ static void *ctrl_loop(void *arg)
             {
                 dprintf(cfd, "err bad_range\n");
                 close(cfd);
+                g_req.hi = 0;
+                g_req.lo = 0;
                 continue;
             }
 

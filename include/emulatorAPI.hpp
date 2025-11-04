@@ -66,7 +66,7 @@ public:
     /**
      * Retrieve memory from an address
      */
-    static std::shared_ptr<uint8_t> getMemory(uint64_t address);
+    static std::vector<uint8_t>* getMemory(uint64_t address, int n, bool update = false, int targetMods = 1);
 
     /**
      * Get the registers

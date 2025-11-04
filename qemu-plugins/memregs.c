@@ -65,7 +65,30 @@ done:
     return out;
 }
 
-void dumpReg(bool* ok)
+void dumpMem(bool *ok)
+{
+    req_t r = g_req;
+    size_t len = (r.hi >= r.lo) ? (size_t)(r.hi - r.lo + 1) : 0;
+    if (len && r.hi != 0 && r.lo != 0)
+    {
+        GByteArray *buf = g_byte_array_sized_new(len);
+        // QEMU API: read guest vaddr
+        if (qemu_plugin_read_memory_vaddr(r.lo, buf, len))
+        {
+            const char *path = *g_mem_path ? g_mem_path : "/tmp/memdump.txt";
+            FILE *f = fopen(path, "w");
+            if (f)
+            {
+                write_hex_dump(f, buf->data, buf->len);
+                fclose(f);
+                *ok = true;
+            }
+        }
+        g_byte_array_free(buf, TRUE);
+    }
+}
+
+void dumpReg(bool *ok)
 {
     GArray *regs = qemu_plugin_get_registers();
     if (regs)
@@ -100,7 +123,8 @@ void dumpReg(bool* ok)
             }
             fclose(f);
 
-            if (ok != NULL) *ok = true;
+            if (ok != NULL)
+                *ok = true;
         }
         g_array_free(regs, TRUE);
     }
@@ -119,6 +143,7 @@ void service_pending_request(unsigned vcpu_index)
     // take a snapshot of the request and clear it
     pthread_mutex_lock(&g_req_mu);
     req_t r = g_req;
+
     if (r.kind == REQ_NONE)
     {
         pthread_mutex_unlock(&g_req_mu);
@@ -131,24 +156,7 @@ void service_pending_request(unsigned vcpu_index)
 
     if (r.kind == REQ_GET_MEM)
     {
-        size_t len = (r.hi >= r.lo) ? (size_t)(r.hi - r.lo + 1) : 0;
-        if (len)
-        {
-            GByteArray *buf = g_byte_array_sized_new(len);
-            // QEMU API: read guest vaddr
-            if (qemu_plugin_read_memory_vaddr(r.lo, buf, len))
-            {
-                const char *path = *g_mem_path ? g_mem_path : "/tmp/branchmem.txt";
-                FILE *f = fopen(path, "w");
-                if (f)
-                {
-                    write_hex_dump(f, buf->data, buf->len);
-                    fclose(f);
-                    ok = true;
-                }
-            }
-            g_byte_array_free(buf, TRUE);
-        }
+        dumpMem(NULL);
     }
     else if (r.kind == REQ_SET_MEM)
     {
@@ -255,4 +263,3 @@ void service_pending_request(unsigned vcpu_index)
     pthread_cond_broadcast(&g_req_cv);
     pthread_mutex_unlock(&g_req_mu);
 }
-      

@@ -105,3 +105,4 @@ void dbg_init_once(void);
 void dbg(const char *fmt, ...);
 
 void dumpReg(bool* ok);
+void dumpMem(bool* ok);

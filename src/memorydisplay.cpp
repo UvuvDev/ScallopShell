@@ -1,7 +1,27 @@
 #include "memorydisplay.hpp"
+#include "emulatorAPI.hpp"
 #include <ftxui/component/component.hpp>
 
 using namespace ftxui;
+
+
+
+uint64_t getRegisterValue(std::string registerArg) {
+    std::vector<std::string>* regs = Emulator::getRegisters(false, -1);
+    if (!regs) return 0;
+
+    for (const std::string& line : *regs) {
+        if (line.rfind(registerArg + "=", 0) == 0) { // starts with "rip="
+            const char* valStr = line.c_str() + 4; // skip "rip="
+            uint64_t val = strtoull(valStr, NULL, 16);
+            return val;
+        }
+    }
+
+    return 0; // not found
+}
+
+
 
 namespace ScallopUI
 {
@@ -29,7 +49,7 @@ namespace ScallopUI
     /*=                                                 =*/    
     /*===================================================*/
 
-    Component MemoryDisplay(uint8_t *data, size_t size,
+    Component MemoryDisplay(std::vector<uint8_t>* data, size_t size,
                             uint64_t base_addr, int bytesPerRow, int visibleRows)
     {
         class Impl : public ComponentBase
@@ -47,18 +67,18 @@ namespace ScallopUI
             if (idx >= size_) return;
 
             // Always snapshot before we mutate
-            hexEditHistory.emplace_back(selectedRow, selectedColumn, data_[idx]);
+            hexEditHistory.emplace_back(selectedRow, selectedColumn, data_->at(idx));
 
             editTrail.emplace_back(selectedRow, selectedColumn);
 
             if (pending_nibble_ < 0) {
                 // --- First nibble (high) ---
-                uint8_t old = data_[idx];
-                data_[idx] = (uint8_t)((v << 4) | (old & 0x0F));
+                uint8_t old = data_->at(idx);
+                data_->at(idx) = (uint8_t)((v << 4) | (old & 0x0F));
                 pending_nibble_ = v; // waiting for low nibble
             } else {
                 // --- Second nibble (low) ---
-                data_[idx] = (uint8_t)((pending_nibble_ << 4) | v);
+                data_->at(idx) = (uint8_t)((pending_nibble_ << 4) | v);
                 pending_nibble_ = -1;
 
                 // advance selection to next cell
@@ -96,14 +116,14 @@ namespace ScallopUI
 
         }
         public:
-            Impl(uint8_t *data, size_t size,
+            Impl(std::vector<uint8_t>* data, size_t size,
                  uint64_t base_addr, int bpr, int rows)
                 : data_(data), size_(size),
                   base_addr_(base_addr), bpr_(bpr), rows_(rows) {
                   }
 
         private:
-            uint8_t *data_;
+            std::vector<uint8_t >* data_;
             size_t size_;
             uint64_t base_addr_;
             int bpr_;
@@ -147,7 +167,7 @@ namespace ScallopUI
                         if (!hexEditHistory.empty()) {
                             HexEditHistory lastEdit = hexEditHistory.back();
 
-                            data_[lastEdit.row*bpr_ + lastEdit.col] = lastEdit.data;
+                            data_->at(lastEdit.row*bpr_ + lastEdit.col) = lastEdit.data;
                             selectedRow = lastEdit.row;
                             selectedColumn = lastEdit.col;
                             hexEditHistory.pop_back();
@@ -178,6 +198,7 @@ namespace ScallopUI
                 if (e == Event::ArrowUp)
                 {
                     top_row_ = std::max(0, top_row_ - 1);
+                    data_ = Emulator::getMemory(base_addr_, rows_*bpr_, true);
                     return true;
                 }
                 if (e == Event::ArrowDown)
@@ -209,7 +230,7 @@ namespace ScallopUI
                     if (!hexEditHistory.empty()) {
                         HexEditHistory lastEdit = hexEditHistory.back();
 
-                        data_[lastEdit.row*bpr_ + lastEdit.col] = lastEdit.data;
+                        data_->at(lastEdit.row*bpr_ + lastEdit.col) = lastEdit.data;
                         selectedRow = lastEdit.row;
                         selectedColumn = lastEdit.col;
                         hexEditHistory.pop_back();
@@ -233,6 +254,14 @@ namespace ScallopUI
 
             Element OnRender() override
             {
+
+                if (data_ == nullptr || data_->empty()) { 
+                    uint64_t regValue = getRegisterValue("rip");
+                    if (regValue != 0) { 
+                        data_ = Emulator::getMemory(regValue, size_, true);
+                        base_addr_ = regValue;
+                    }
+                }
                 std::vector<Element> lines;
                 lines.reserve(rows_ + 2);
 
@@ -242,8 +271,11 @@ namespace ScallopUI
                 const int max_rows = static_cast<int>((size_ + bpr_ - 1) / bpr_);
                 const int end_row = std::min(top_row_ + rows_, max_rows);
 
-                for (int r = top_row_; r < end_row; ++r)
+                for (int r = top_row_; r < end_row && data_ != nullptr && !data_->empty(); ++r)
                 {
+
+                    //printf("%p RELEASE MEEEEE\n", data_);
+                    
                     size_t start = static_cast<size_t>(r) * bpr_;
 
                     // Write the address for currently selected address space
@@ -257,7 +289,7 @@ namespace ScallopUI
                         if (idx < size_)
                         {
                             // Show the data bytes
-                            uint8_t b = data_[idx];
+                            uint8_t b = data_->at(idx);
                             Element e = text(hex1ByteStr(b)) | color(Color::Magenta); // This is the actual text being displayed
                             
                             // Dim NULL bytes for readability
@@ -295,6 +327,8 @@ namespace ScallopUI
                     return display | color(Color::Magenta) | reflect(mouseBox);
 
                 return display | reflect(mouseBox);
+
+
             }
         };
 

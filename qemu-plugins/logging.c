@@ -71,6 +71,7 @@ static void insn_exec_cb(unsigned int vcpu_index, void *udata)
         ctx->fallthrough, ctx->tb_vaddr);
 
     dumpReg(NULL);
+    dumpMem(NULL);
 }
 
 void tb_trans_cb(qemu_plugin_id_t id, struct qemu_plugin_tb *tb){

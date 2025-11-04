@@ -428,9 +428,6 @@ int Emulator::modifyMemory(uint64_t address, uint8_t* data, int n) {
     std::snprintf(cmd, sizeof(cmd), "set memory 0x%llx;0x%llx\n",
                   (unsigned long long)address, (unsigned long long)address + n);
     return sendCommandOnce(cmd, &ret);
-
-
-    return 0;
 }
 
 int Emulator::focusMemory(uint64_t lowAddress, uint64_t highAddress) {
@@ -439,9 +436,83 @@ int Emulator::focusMemory(uint64_t lowAddress, uint64_t highAddress) {
     return exitCode;
 }
 
-std::shared_ptr<uint8_t> Emulator::getMemory(uint64_t address) {
-    (void)address;
-    return nullptr;
+std::vector<uint8_t>* Emulator::getMemory(uint64_t address, int n, bool _update, int targetMods) {
+
+    static bool tryUpdateAgain = false;
+    static int modificationsMade = 0;
+    static int targetModifications = 0;
+    static std::vector<uint8_t> memory = {};
+
+    static uint64_t address_ = address;
+    static int n_ = n;
+
+    
+    if (address_ != -1) address_ = address;
+    if (n_ != -1) n_ = n;
+    
+    if (_update == false && tryUpdateAgain == false) return &memory;
+
+    if (targetMods != -1) targetModifications = targetMods;
+
+    
+
+    if (_update == false) return &memory;
+    
+    // Get request api call ): no worky
+    std::string ret;
+    char cmd[128];
+    std::snprintf(cmd, sizeof(cmd), "get memory 0x%llx;0x%llx\n",
+                  (unsigned long long)address, (unsigned long long)address + n);
+    int errorCode = sendCommandOnce(cmd, &ret);
+
+    //if (!errorCode) return &memory;
+
+    std::fstream memoryFile("/tmp/memdump.txt", std::ios::in);
+    
+    if (!memoryFile.is_open()) {
+        tryUpdateAgain = true;
+        return &memory; // <- bug is here
+    }
+
+    
+    if (modificationsMade >= targetModifications) {
+        tryUpdateAgain = false;
+        modificationsMade = 0;
+        targetModifications = 0;
+    }
+    else {
+        tryUpdateAgain = true;
+    }
+
+    
+    // Parse the memory file
+    std::vector<std::string> bytes;
+    std::string memoryDumpLine;
+    while (std::getline(memoryFile, memoryDumpLine)) {
+        std::stringstream check1(memoryDumpLine);
+        std::string intermediate;
+        
+        while(std::getline(check1, intermediate, ' '))
+        {
+            bytes.push_back(intermediate);
+        }
+
+    }
+
+    if (bytes.empty()) return &memory;
+
+    memory.clear();
+
+    // Convert memory
+    for (auto byte : bytes) {
+        uint8_t byteInt;
+        sscanf(byte.c_str(), "%hhx", &byteInt);
+        memory.emplace_back(byteInt);
+    }
+
+    
+    
+    return &memory;
 }
 
 std::vector<std::string>* Emulator::getRegisters(bool _update, int targetMods) {
@@ -509,7 +580,7 @@ int Emulator::step(int steps) {
     std::string ret;
     bool exitCode = sendCommandOnce("step" + std::to_string(steps) + "\n", &ret);
     getRegisters(true, steps); // Send a signal to getRegisters() to update. This keeps it performant
-
+    getMemory(-1, -1, true, steps);
     return exitCode;
 }
 
