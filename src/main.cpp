@@ -15,6 +15,7 @@
 #include "disasmdisplay.hpp"
 #include "emulatorAPI.hpp"
 #include "registerdisplay.hpp"
+#include "debug.hpp"
 
 using namespace ftxui;
 
@@ -34,12 +35,18 @@ int main()
 
   // auto mem = ScallopUI::MemoryDisplay(memory.data(), memory.size(), 0x7ffff560000, 16, 16);
   const int memoryRange = 0x1000;
-  auto mem  = ScallopUI::MemoryDisplay(Emulator::getMemory(0xdeadbeef, 0x1000, true), memoryRange, 0, 8);
-  auto code  = ScallopUI::MemoryDisplay(Emulator::getMemory(0xfadf00b, 0x1000, true), memoryRange, 0, 8);
+  auto mem  = ScallopUI::MemoryDisplay(nullptr, memoryRange, 0, 8);
+  auto code  = ScallopUI::MemoryDisplay(nullptr, memoryRange, 0, 8);
   auto notes = ScallopUI::Notepad();
   auto regs = ScallopUI::RegisterDisplay();
 
+  Emulator emu;
+  int pid = emu.startEmulation("/home/bradley/Downloads/a.out");
+  if (pid < 0) {
+      std::cerr << "Failed to start QEMU\n";
+  }
 
+  std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
   /*=================*/
 
@@ -117,13 +124,6 @@ int main()
   int splitCliMem = 10;
   auto root = ResizableSplitBottom(cli_split, centerTop, &splitCliMem);
 
-  Emulator emu;
-  int pid = emu.startEmulation("/home/bradley/Downloads/a.out");
-  if (pid < 0) {
-      std::cerr << "Failed to start QEMU\n";
-  }
-
-
 
   std::thread([&]{
     while (running) {
@@ -135,9 +135,21 @@ int main()
 
   root = CatchEvent(root, [&](const Event& e) {
     // Example: focus CLI on Ctrl key press
-    if (e == Event::CtrlA) {
+    if (e == Event::CtrlS) {
         cli_input->TakeFocus();
         return true;  // consume
+    }
+    else if (e == Event::CtrlD) {
+      disasm->TakeFocus();
+      return true;
+    }
+    else if (e == Event::CtrlM) {
+      mem->TakeFocus();
+      return true;
+    }
+    else if (e == Event::CtrlA) {
+      code->TakeFocus();
+      return true;
     }
     return false;     // let others handle it
   });

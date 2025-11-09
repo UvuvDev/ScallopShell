@@ -1,25 +1,9 @@
 #include "memorydisplay.hpp"
 #include "emulatorAPI.hpp"
+#include "debug.hpp"
 #include <ftxui/component/component.hpp>
 
 using namespace ftxui;
-
-
-
-uint64_t getRegisterValue(std::string registerArg) {
-    std::vector<std::string>* regs = Emulator::getRegisters(false, -1);
-    if (!regs) return 0;
-
-    for (const std::string& line : *regs) {
-        if (line.rfind(registerArg + "=", 0) == 0) { // starts with "rip="
-            const char* valStr = line.c_str() + 4; // skip "rip="
-            uint64_t val = strtoull(valStr, NULL, 16);
-            return val;
-        }
-    }
-
-    return 0; // not found
-}
 
 
 
@@ -198,7 +182,7 @@ namespace ScallopUI
                 if (e == Event::ArrowUp)
                 {
                     top_row_ = std::max(0, top_row_ - 1);
-                    data_ = Emulator::getMemory(base_addr_, rows_*bpr_, true);
+
                     return true;
                 }
                 if (e == Event::ArrowDown)
@@ -255,13 +239,10 @@ namespace ScallopUI
             Element OnRender() override
             {
 
-                if (data_ == nullptr || data_->empty()) { 
-                    uint64_t regValue = getRegisterValue("rip");
-                    if (regValue != 0) { 
-                        data_ = Emulator::getMemory(regValue, size_, true);
-                        base_addr_ = regValue;
-                    }
-                }
+                base_addr_ = Emulator::getRegisterValue("rsp");
+                data_ = Emulator::getMemory(base_addr_, rows_*bpr_, false);
+                size_ =  (data_ && !data_->empty()) ? data_->size() : 0;
+
                 std::vector<Element> lines;
                 lines.reserve(rows_ + 2);
 
@@ -271,10 +252,10 @@ namespace ScallopUI
                 const int max_rows = static_cast<int>((size_ + bpr_ - 1) / bpr_);
                 const int end_row = std::min(top_row_ + rows_, max_rows);
 
+                
                 for (int r = top_row_; r < end_row && data_ != nullptr && !data_->empty(); ++r)
                 {
 
-                    //printf("%p RELEASE MEEEEE\n", data_);
                     
                     size_t start = static_cast<size_t>(r) * bpr_;
 

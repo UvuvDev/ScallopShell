@@ -1,5 +1,6 @@
 #include "emulatorAPI.hpp"
 #include "guihelpers.hpp"
+#include "debug.hpp"
 
 // POSIX
 #include <sys/types.h>
@@ -36,6 +37,23 @@ static std::vector<InstructionInfo> instructionInfo;
     
 int socket_fd() { return sock_fd_; }
 int pid() { return child_pid_; }
+
+
+uint64_t Emulator::getRegisterValue(std::string registerArg) {
+    std::vector<std::string>* regs = Emulator::getRegisters(false, -1);
+    if (!regs) return 0;
+
+    for (const std::string& line : *regs) {
+        if (line.rfind(registerArg + "=", 0) == 0) { // starts with "rip="
+            const char* valStr = line.c_str() + 4; // skip "rip="
+            uint64_t val = strtoull(valStr, NULL, 16);
+            return val;
+        }
+    }
+
+    return 0; // not found
+}
+
 
 static int connectWithRetryUnix(const std::string& path,
                                 std::chrono::milliseconds total_timeout =
@@ -203,6 +221,24 @@ std::fstream& GotoLine(std::fstream& file, unsigned int num){
         file.ignore(std::numeric_limits<std::streamsize>::max(),'\n');
     }
     return file;
+}
+
+// emulatorAPI.cpp
+static bool sendCommandNoReply(const std::string& cmd) {
+    int fd;
+    if (!connectUnixOnce(kSockPath, fd)) return false;
+    std::string line = cmd;
+    if (line.empty() || line.back() != '\n') line.push_back('\n');
+    ssize_t off = 0;
+    while (off < (ssize_t)line.size()) {
+        ssize_t n = ::send(fd, line.data() + off, line.size() - off, 0);
+        if (n > 0) off += n;
+        else if (n < 0 && errno == EINTR) continue;
+        else { ::close(fd); return false; }
+    }
+    ::shutdown(fd, SHUT_WR);   // we’re done sending
+    ::close(fd);               // don’t wait for plugin
+    return true;
 }
 
 /*=============== Actual Emulator Functions ===============*/
@@ -432,86 +468,68 @@ int Emulator::modifyMemory(uint64_t address, uint8_t* data, int n) {
 
 int Emulator::focusMemory(uint64_t lowAddress, uint64_t highAddress) {
     std::string ret;
-    bool exitCode = sendCommandOnce(std::to_string(lowAddress) + ';' + std::to_string(highAddress) + '\n', &ret);
+    bool exitCode = sendCommandNoReply(std::to_string(lowAddress) + ';' + std::to_string(highAddress) + '\n');
     return exitCode;
 }
 
 std::vector<uint8_t>* Emulator::getMemory(uint64_t address, int n, bool _update, int targetMods) {
-
     static bool tryUpdateAgain = false;
-    static int modificationsMade = 0;
-    static int targetModifications = 0;
-    static std::vector<uint8_t> memory = {};
+    static int modificationsMade = 0, targetModifications = 0;
+    static std::vector<uint8_t> memory;
+    static constexpr int kDefaultRange = 0x100;
 
-    static uint64_t address_ = address;
-    static int n_ = n;
+    static uint64_t address_ = 0;
+    static int n_ = kDefaultRange;
 
-    
-    if (address_ != -1) address_ = address;
-    if (n_ != -1) n_ = n;
-    
-    if (_update == false && tryUpdateAgain == false) return &memory;
+    if (!_update && !tryUpdateAgain) return &memory;
 
-    if (targetMods != -1) targetModifications = targetMods;
+    // Update sticky params only when caller sets them
+    if (address != (uint64_t)-1) address_ = address;
+    if (n >= 0) n_ = n;
 
-    
+    // If you really need a guard, check that address_ has been set at least once:
+    // if (!address_) return &memory;
 
-    if (_update == false) return &memory;
-    
-    // Get request api call ): no worky
-    std::string ret;
-    char cmd[128];
-    std::snprintf(cmd, sizeof(cmd), "get memory 0x%llx;0x%llx\n",
-                  (unsigned long long)address, (unsigned long long)address + n);
-    int errorCode = sendCommandOnce(cmd, &ret);
-
-    //if (!errorCode) return &memory;
+    // Issue request using the sticky state:
+    sendCommandNoReply(
+    "get memory " + hex8ByteStr(address_) + ";" + hex8ByteStr(address_ + (uint64_t)n_) + "\n");
 
     std::fstream memoryFile("/tmp/memdump.txt", std::ios::in);
-    
     if (!memoryFile.is_open()) {
         tryUpdateAgain = true;
-        return &memory; // <- bug is here
+        return &memory;
     }
 
-    
+    // Throttle re-reads by the targetMods mechanism (your existing logic)
+    if (targetMods != -1) targetModifications = targetMods;
     if (modificationsMade >= targetModifications) {
-        tryUpdateAgain = false;
-        modificationsMade = 0;
-        targetModifications = 0;
-    }
-    else {
+        tryUpdateAgain = false; modificationsMade = 0; targetModifications = 0;
+    } else {
         tryUpdateAgain = true;
     }
 
-    
-    // Parse the memory file
-    std::vector<std::string> bytes;
-    std::string memoryDumpLine;
-    while (std::getline(memoryFile, memoryDumpLine)) {
-        std::stringstream check1(memoryDumpLine);
-        std::string intermediate;
-        
-        while(std::getline(check1, intermediate, ' '))
-        {
-            bytes.push_back(intermediate);
+    // Parse: skip empties and non-hex
+    std::vector<std::string> tokens;
+    std::string line;
+    while (std::getline(memoryFile, line)) {
+        std::stringstream ss(line);
+        std::string tok;
+        while (std::getline(ss, tok, ' ')) {
+            if (tok.size() == 2 && std::isxdigit((unsigned char)tok[0]) && std::isxdigit((unsigned char)tok[1]))
+                tokens.emplace_back(tok);
         }
-
     }
 
-    if (bytes.empty()) return &memory;
+    if (tokens.empty()) return &memory;
 
     memory.clear();
-
-    // Convert memory
-    for (auto byte : bytes) {
-        uint8_t byteInt;
-        sscanf(byte.c_str(), "%hhx", &byteInt);
-        memory.emplace_back(byteInt);
+    memory.reserve(tokens.size());
+    for (const auto& t : tokens) {
+        unsigned int v = 0; // use unsigned int to check conversion result cleanly
+        std::sscanf(t.c_str(), "%x", &v);
+        memory.emplace_back((uint8_t)v);
     }
-
-    
-    
+    modificationsMade++;
     return &memory;
 }
 
@@ -578,9 +596,13 @@ Emulator::getInstructionJumpPaths(uint64_t address) {
 
 int Emulator::step(int steps) {
     std::string ret;
-    bool exitCode = sendCommandOnce("step" + std::to_string(steps) + "\n", &ret);
+    
     getRegisters(true, steps); // Send a signal to getRegisters() to update. This keeps it performant
-    getMemory(-1, -1, true, steps);
+    getMemory(getRegisterValue("rsp"), -1, true, steps);
+
+    bool exitCode = sendCommandNoReply("step " + std::to_string(steps) + "\n");
+
+    //OUT_TO_FILE(hex8ByteStr(getRegisterValue("rip")));
     return exitCode;
 }
 

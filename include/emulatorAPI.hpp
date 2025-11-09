@@ -68,6 +68,8 @@ public:
      */
     static std::vector<uint8_t>* getMemory(uint64_t address, int n, bool update = false, int targetMods = 1);
 
+    static uint64_t getRegisterValue(std::string registerArg);
+    
     /**
      * Get the registers
      */
