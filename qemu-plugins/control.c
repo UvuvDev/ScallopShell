@@ -236,6 +236,8 @@ static void *ctrl_loop(void *arg)
             {
                 dprintf(cfd, "err bad_args\n");
                 close(cfd);
+                g_req.hi = 0;
+                g_req.lo = 0;
                 continue;
             }
             *semi = 0;
@@ -246,15 +248,19 @@ static void *ctrl_loop(void *arg)
             {
                 dprintf(cfd, "err bad_range\n");
                 close(cfd);
+                g_req.hi = 0;
+                g_req.lo = 0;
                 continue;
             }
 
+            bool paused = atomic_load_explicit(&g_gate[0].running, memory_order_relaxed) == 0;
             pthread_mutex_lock(&g_req_mu);
             g_req.kind = is_set ? REQ_SET_MEM : REQ_GET_MEM;
             g_req.lo = lo;
             g_req.hi = hi;
             g_req.done = false;
             g_req.ok = false;
+            g_req.recredit = paused;
             pthread_mutex_unlock(&g_req_mu);
 
             /* nudge vCPU so service_pending_request runs */
@@ -278,12 +284,14 @@ static void *ctrl_loop(void *arg)
         {
             int is_set = (buf[0] == 's');
 
+            bool paused = atomic_load_explicit(&g_gate[0].running, memory_order_relaxed) == 0;
             pthread_mutex_lock(&g_req_mu);
             g_req.kind = is_set ? REQ_SET_REGS : REQ_GET_REGS;
             g_req.lo = 0;
             g_req.hi = 0;
             g_req.done = false;
             g_req.ok = false;
+            g_req.recredit = paused;
             pthread_mutex_unlock(&g_req_mu);
 
             gate_give(0, 1);

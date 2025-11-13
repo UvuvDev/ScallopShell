@@ -2,6 +2,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
+#include <inttypes.h>
 #include <glib.h>
 #include "scallop.h"
 
@@ -65,7 +66,82 @@ done:
     return out;
 }
 
-void dumpReg(bool* ok)
+static bool try_chunked_memread(uint64_t base, size_t len, GByteArray *buf)
+{
+    const size_t chunk = 64;
+    bool any = false;
+    GByteArray *tmp = g_byte_array_sized_new(chunk);
+    if (!tmp)
+        return false;
+
+    for (size_t off = 0; off < len; )
+    {
+        size_t want = chunk;
+        if (want > len - off)
+            want = len - off;
+
+        g_byte_array_set_size(tmp, want);
+        if (qemu_plugin_read_memory_vaddr(base + off, tmp, want))
+        {
+            memcpy(buf->data + off, tmp->data, want);
+            any = true;
+        }
+        else
+        {
+            memset(buf->data + off, 0, want);
+        }
+        off += want;
+    }
+
+    g_byte_array_free(tmp, TRUE);
+    return any;
+}
+
+void dumpMem(const req_t *req, bool *ok)
+{
+    if (!req)
+        return;
+    size_t len = (req->hi >= req->lo) ? (size_t)(req->hi - req->lo + 1) : 0;
+    if (len == 0 || req->hi == 0 || req->lo == 0)
+        return;
+
+    GByteArray *buf = g_byte_array_sized_new(len);
+    if (!buf)
+        return;
+
+    g_byte_array_set_size(buf, len);
+
+    bool read_ok = qemu_plugin_read_memory_vaddr(req->lo, buf, len);
+    if (!read_ok)
+    {
+        dbg("[mem] direct read 0x%016" PRIx64 " +0x%zx failed, retrying in chunks\n",
+            req->lo, len);
+        read_ok = try_chunked_memread(req->lo, len, buf);
+    }
+
+    if (read_ok)
+    {
+        const char *path = *g_mem_path ? g_mem_path : "/tmp/memdump.txt";
+        FILE *f = fopen(path, "w");
+        if (f)
+        {
+            write_hex_dump(f, buf->data, buf->len);
+            fclose(f);
+            if (ok)
+                *ok = true;
+            dbg("[mem] wrote %zu bytes from 0x%016" PRIx64 " to %s\n",
+                buf->len, req->lo, path);
+        }
+    }
+    else
+    {
+        dbg("[mem] unable to read memory at 0x%016" PRIx64 " len=0x%zx\n",
+            req->lo, len);
+    }
+    g_byte_array_free(buf, TRUE);
+}
+
+void dumpReg(bool *ok)
 {
     GArray *regs = qemu_plugin_get_registers();
     if (regs)
@@ -100,7 +176,8 @@ void dumpReg(bool* ok)
             }
             fclose(f);
 
-            if (ok != NULL) *ok = true;
+            if (ok != NULL)
+                *ok = true;
         }
         g_array_free(regs, TRUE);
     }
@@ -110,6 +187,7 @@ void vcpu_init_cb(qemu_plugin_id_t id, unsigned int vcpu_index)
 {
     (void)id;
     (void)vcpu_index;
+    dumpReg(NULL);
 }
 
 void service_pending_request(unsigned vcpu_index)
@@ -119,36 +197,21 @@ void service_pending_request(unsigned vcpu_index)
     // take a snapshot of the request and clear it
     pthread_mutex_lock(&g_req_mu);
     req_t r = g_req;
+
     if (r.kind == REQ_NONE)
     {
         pthread_mutex_unlock(&g_req_mu);
         return;
     }
     g_req.kind = REQ_NONE;
+    g_req.recredit = false;
     pthread_mutex_unlock(&g_req_mu);
 
     bool ok = false;
 
     if (r.kind == REQ_GET_MEM)
     {
-        size_t len = (r.hi >= r.lo) ? (size_t)(r.hi - r.lo + 1) : 0;
-        if (len)
-        {
-            GByteArray *buf = g_byte_array_sized_new(len);
-            // QEMU API: read guest vaddr
-            if (qemu_plugin_read_memory_vaddr(r.lo, buf, len))
-            {
-                const char *path = *g_mem_path ? g_mem_path : "/tmp/branchmem.txt";
-                FILE *f = fopen(path, "w");
-                if (f)
-                {
-                    write_hex_dump(f, buf->data, buf->len);
-                    fclose(f);
-                    ok = true;
-                }
-            }
-            g_byte_array_free(buf, TRUE);
-        }
+        dumpMem(&r, &ok);
     }
     else if (r.kind == REQ_SET_MEM)
     {
@@ -157,7 +220,7 @@ void service_pending_request(unsigned vcpu_index)
         {
             const char *path = *g_mem_path ? g_mem_path : "/tmp/branchmem.txt";
             GByteArray *src = read_hex_file(path, len);
-            if (src && src->len)
+            if (src && src->len == len)
             {
                 ok = qemu_plugin_write_memory_vaddr(r.lo, src);
             }
@@ -254,5 +317,13 @@ void service_pending_request(unsigned vcpu_index)
     g_req.done = true;
     pthread_cond_broadcast(&g_req_cv);
     pthread_mutex_unlock(&g_req_mu);
+
+    if (r.recredit)
+    {
+        unsigned vcpu = vcpu_index & (MAX_VCPUS - 1);
+        if (!atomic_load_explicit(&g_gate[vcpu].running, memory_order_relaxed))
+        {
+            gate_give(vcpu, 1);
+        }
+    }
 }
-      

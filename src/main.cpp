@@ -35,8 +35,8 @@ int main()
 
   // auto mem = ScallopUI::MemoryDisplay(memory.data(), memory.size(), 0x7ffff560000, 16, 16);
   const int memoryRange = 0;
-  auto mem  = ScallopUI::MemoryDisplay(nullptr, memoryRange, 0, 8);
-  auto code  = ScallopUI::MemoryDisplay(nullptr, memoryRange, 0, 8);
+  auto mem  = ScallopUI::MemoryDisplay(nullptr, "rsp", memoryRange, 0, 8);
+  auto code  = ScallopUI::MemoryDisplay(nullptr, "rip", memoryRange, 0, 8);
   auto notes = ScallopUI::Notepad();
   auto regs = ScallopUI::RegisterDisplay();
 
@@ -113,6 +113,7 @@ int main()
 
   auto cli_input = ScallopUI::InputCli();
   auto cli_pane = Container::Horizontal({
+    cli_input,
     cli_input,
     ScallopUI::CliHistory(),
   });

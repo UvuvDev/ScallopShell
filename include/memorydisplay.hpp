@@ -16,7 +16,7 @@
 
 namespace ScallopUI {
 
-    ftxui::Component MemoryDisplay(uint8_t *data, size_t size,
+    ftxui::Component MemoryDisplay(std::vector<uint8_t>* data, std::string followedReg, size_t size,
                             uint64_t base_addr = 0, int bytesPerRow = 24, int visibleRows = 30);
 
 }

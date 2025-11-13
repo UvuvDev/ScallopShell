@@ -70,7 +70,10 @@ static void insn_exec_cb(unsigned int vcpu_index, void *udata)
         ctx->pc, ctx->kind, (ctx->branch_target?"":""), ctx->branch_target?ctx->branch_target:0,
         ctx->fallthrough, ctx->tb_vaddr);
 
-    dumpReg(NULL);
+    if (!atomic_load_explicit(&g_gate[vcpu_index & (MAX_VCPUS - 1)].running,
+                              memory_order_relaxed)) {
+        dumpReg(NULL);
+    }
 }
 
 void tb_trans_cb(qemu_plugin_id_t id, struct qemu_plugin_tb *tb){

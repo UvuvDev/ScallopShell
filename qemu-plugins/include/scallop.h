@@ -70,6 +70,7 @@ typedef struct {
     uint64_t   lo, hi;   // mem range (for GET/SET MEM)
     bool       done;     // set by vCPU side when finished
     bool       ok;       // success/failure of the operation
+    bool       recredit; // true if control thread owes a token back after servicing
 } req_t;
 
 // ---- globals (defined in memregs.c)
@@ -105,3 +106,4 @@ void dbg_init_once(void);
 void dbg(const char *fmt, ...);
 
 void dumpReg(bool* ok);
+void dumpMem(const req_t *req, bool* ok);

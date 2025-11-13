@@ -22,6 +22,7 @@
 #include <iostream>
 #include <fstream>
 #include <filesystem>
+#include <unordered_map>
 
 int child_pid_ = -1;
 int sock_fd_   = -1;
@@ -408,29 +409,39 @@ int Emulator::addBreakpoint(uint64_t address, std::string& comment) {
 }
 
 int Emulator::modifyMemory(uint64_t address, uint8_t* data, int n) {
+    if (!data || n <= 0)
+        return false;
+
     std::string ret;
-
     std::string memoryDumpWrite;
+    memoryDumpWrite.reserve(static_cast<size_t>(n) * 3);
 
-    for (int i = 0; i < n/8; i++) {
-        for (int j = 0; j < 8; j++) {
-            memoryDumpWrite += hex1ByteStr(data[i*8 + j]) + ' ';
-        }
-        memoryDumpWrite += '\n';
+    for (int i = 0; i < n; ++i) {
+        memoryDumpWrite += hex1ByteStr(data[i]);
+        if (((i + 1) % 8) == 0)
+            memoryDumpWrite.push_back('\n');
+        else
+            memoryDumpWrite.push_back(' ');
     }
+    if (!memoryDumpWrite.empty() && memoryDumpWrite.back() != '\n')
+        memoryDumpWrite.back() = '\n';
 
-    std::ofstream memoryFile("/tmp/memdump.txt", std::ios::out | std::ios::trunc);
-    memoryFile << memoryDumpWrite;
+    if (!writeWholeFile(kMemDump, memoryDumpWrite))
+        return false;
 
+    uint64_t span = static_cast<uint64_t>(n - 1);
+    uint64_t hi = address;
+    if (span > std::numeric_limits<uint64_t>::max() - address)
+        hi = std::numeric_limits<uint64_t>::max();
+    else
+        hi = address + span;
 
-    if (!writeWholeFile(kMemDump, data, n)) return false;
     char cmd[128];
     std::snprintf(cmd, sizeof(cmd), "set memory 0x%llx;0x%llx\n",
-                  (unsigned long long)address, (unsigned long long)address + n);
-    return sendCommandOnce(cmd, &ret);
-
-
-    return 0;
+                  (unsigned long long)address, (unsigned long long)hi);
+    if (!sendCommandOnce(cmd, &ret))
+        return false;
+    return ret.rfind("ok", 0) == 0;
 }
 
 int Emulator::focusMemory(uint64_t lowAddress, uint64_t highAddress) {
@@ -439,57 +450,145 @@ int Emulator::focusMemory(uint64_t lowAddress, uint64_t highAddress) {
     return exitCode;
 }
 
-std::shared_ptr<uint8_t> Emulator::getMemory(uint64_t address) {
-    (void)address;
-    return nullptr;
+namespace {
+struct MemoryCache {
+    bool tryUpdateAgain = false;
+    int modificationsMade = 0;
+    int targetModifications = 0;
+    uint64_t address = std::numeric_limits<uint64_t>::max();
+    int span = -1;
+    std::vector<uint8_t> data;
+};
+
+static std::unordered_map<std::string, MemoryCache>& memoryCaches() {
+    static std::unordered_map<std::string, MemoryCache> caches;
+    return caches;
+}
+} // namespace
+
+std::vector<uint8_t>* Emulator::getMemory(uint64_t address, int n, bool _update,
+                                          int targetMods, const std::string& cacheKey) {
+    auto& cache = memoryCaches()[cacheKey];
+    const uint64_t kNoAddress = std::numeric_limits<uint64_t>::max();
+
+    if (address != kNoAddress)
+        cache.address = address;
+    if (n != -1)
+        cache.span = n;
+
+    if (cache.address == kNoAddress || cache.span <= 0)
+        return &cache.data;
+
+    if (!_update && !cache.tryUpdateAgain)
+        return &cache.data;
+
+    if (targetMods != -1)
+        cache.targetModifications = targetMods;
+
+    if (!_update)
+        return &cache.data;
+
+    uint64_t span = static_cast<uint64_t>(cache.span - 1);
+    uint64_t hi = cache.address;
+    if (span > std::numeric_limits<uint64_t>::max() - cache.address)
+        hi = std::numeric_limits<uint64_t>::max();
+    else
+        hi = cache.address + span;
+
+    std::string ret;
+    char cmd[128];
+    std::snprintf(cmd, sizeof(cmd), "get memory 0x%llx;0x%llx\n",
+                  (unsigned long long)cache.address, (unsigned long long)hi);
+    if (!sendCommandOnce(cmd, &ret) || ret.rfind("ok", 0) != 0) {
+        cache.tryUpdateAgain = true;
+        return &cache.data;
+    }
+
+    std::ifstream memoryFile(kMemDump, std::ios::in);
+    if (!memoryFile.is_open()) {
+        cache.tryUpdateAgain = true;
+        return &cache.data;
+    }
+
+    std::vector<std::string> bytes;
+    std::string memoryDumpLine;
+    while (std::getline(memoryFile, memoryDumpLine)) {
+        std::stringstream check1(memoryDumpLine);
+        std::string intermediate;
+        while (std::getline(check1, intermediate, ' ')) {
+            if (!intermediate.empty())
+                bytes.push_back(intermediate);
+        }
+    }
+
+    if (bytes.empty()) {
+        cache.tryUpdateAgain = true;
+        return &cache.data;
+    }
+
+    cache.data.clear();
+    cache.data.reserve(bytes.size());
+    for (const auto& byte : bytes) {
+        uint8_t byteInt = 0;
+        if (sscanf(byte.c_str(), "%hhx", &byteInt) == 1)
+            cache.data.emplace_back(byteInt);
+    }
+
+    if (cache.data.empty()) {
+        cache.tryUpdateAgain = true;
+        return &cache.data;
+    }
+
+    if (cache.data.size() > static_cast<size_t>(cache.span))
+        cache.data.resize(static_cast<size_t>(cache.span));
+
+    if (cache.targetModifications > 0) {
+        cache.modificationsMade++;
+        if (cache.modificationsMade >= cache.targetModifications) {
+            cache.targetModifications = 0;
+            cache.modificationsMade = 0;
+            cache.tryUpdateAgain = false;
+        } else {
+            cache.tryUpdateAgain = true;
+        }
+    } else {
+        cache.modificationsMade = 0;
+        cache.tryUpdateAgain = false;
+    }
+
+    return &cache.data;
 }
 
-std::vector<std::string>* Emulator::getRegisters(bool _update, int targetMods) {
-    
-    static bool tryUpdateAgain = false;
-    static int modificationsMade = 0;
-    static int targetModifications = 0;
-    static std::vector<std::string> registers = {};
+std::vector<std::string>* Emulator::getRegisters(bool _update) {
+    static bool dirty = true;
+    static std::vector<std::string> registers;
 
-    
+    if (_update) {
+        dirty = true;
+    }
 
-    if (_update == false && tryUpdateAgain == false) return &registers;
-    
-    if (targetMods != -1) targetModifications = targetMods;
-
-    std::fstream regDump("/tmp/regdump.txt");
-    
-    if (!regDump.is_open()) {
-        tryUpdateAgain = true;
+    if (!dirty && !registers.empty()) {
         return &registers;
     }
 
-    if (modificationsMade >= targetModifications) {
-        tryUpdateAgain = false;
-        modificationsMade = 0;
-        targetModifications = 0;
-    }
-    else {
-        tryUpdateAgain = true;
+    std::ifstream regDump(kRegDump, std::ios::in);
+    if (!regDump.is_open()) {
+        return &registers;
     }
 
-    // If its told by step() to update, then reparse the regdump
     std::vector<std::string> registersTemp;
-
-    std::string temp; 
-    while (std::getline(regDump, temp)) {
-        registersTemp.emplace_back(temp);
+    std::string line;
+    while (std::getline(regDump, line)) {
+        if (!line.empty()) {
+            registersTemp.emplace_back(line);
+        }
     }
-
-    if (registersTemp.empty()) tryUpdateAgain = true;
-    else {
-        registers.clear();
-        registers = registersTemp;
-        modificationsMade++;
-    }
-
-
     regDump.close();
+
+    if (!registersTemp.empty()) {
+        registers = std::move(registersTemp);
+        dirty = false;
+    }
 
     return &registers;
 }
@@ -507,9 +606,8 @@ Emulator::getInstructionJumpPaths(uint64_t address) {
 
 int Emulator::step(int steps) {
     std::string ret;
-    bool exitCode = sendCommandOnce("step" + std::to_string(steps) + "\n", &ret);
-    getRegisters(true, steps); // Send a signal to getRegisters() to update. This keeps it performant
-
+    bool exitCode = sendCommandOnce("step " + std::to_string(steps) + "\n", &ret);
+    getRegisters(true); // mark cached registers dirty so UI reloads from file
     return exitCode;
 }
 

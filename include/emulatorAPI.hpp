@@ -66,12 +66,13 @@ public:
     /**
      * Retrieve memory from an address
      */
-    static std::shared_ptr<uint8_t> getMemory(uint64_t address);
+    static std::vector<uint8_t>* getMemory(uint64_t address, int n, bool update = false,
+                                           int targetMods = 1, const std::string& cacheKey = std::string());
 
     /**
      * Get the registers
      */
-    static std::vector<std::string>* getRegisters(bool update = false, int targetMods = -1);
+    static std::vector<std::string>* getRegisters(bool update = false);
 
     /**
      * Set the value of a register
