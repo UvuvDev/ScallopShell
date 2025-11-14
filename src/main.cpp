@@ -25,7 +25,6 @@ using namespace ftxui;
 int main()
 {
 
-
   ScallopUI::initCliCommands();
 
   std::atomic<bool> running = true;
@@ -33,7 +32,6 @@ int main()
   auto screen = ScreenInteractive::Fullscreen();
   ftxui::ScreenInteractive* g_screen = &screen;
 
-  // auto mem = ScallopUI::MemoryDisplay(memory.data(), memory.size(), 0x7ffff560000, 16, 16);
   const int memoryRange = 0;
   auto mem  = ScallopUI::MemoryDisplay(nullptr, "rsp", memoryRange, 0, 8);
   auto code  = ScallopUI::MemoryDisplay(nullptr, "rip", memoryRange, 0, 8);

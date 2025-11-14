@@ -71,6 +71,7 @@ static int connectWithRetryUnix(const std::string& path,
 }
 
 static bool connectUnixOnce(const std::string& path, int& out_fd) {
+    
     int fd = ::socket(AF_UNIX, SOCK_STREAM, 0);
     if (fd < 0) return false;
 

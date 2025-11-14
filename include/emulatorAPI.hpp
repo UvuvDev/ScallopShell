@@ -5,6 +5,7 @@
 #include <vector>
 #include "memory"
 #include "string"
+#include <MinimalSocket/tcp/TcpClient.h>
 
 enum class _EmulType {
     QEMU = 1,

@@ -30,6 +30,21 @@ else()
   add_subdirectory(${FTXUI_SOURCE_DIR} ${CMAKE_BINARY_DIR}/_deps/ftxui-build EXCLUDE_FROM_ALL)
 endif()
 
+set(MIN_SOCKET_SOURCE_DIR "${CMAKE_BINARY_DIR}/_deps/min_sock-src")
+if (NOT EXISTS "${MIN_SOCKET_SOURCE_DIR}/CMakeLists.txt")
+  include(FetchContent)
+  set(BUILD_MinimalCppSocket_SAMPLES OFF CACHE BOOL "" FORCE) # you don't want the samples in this case
+  FetchContent_Declare(
+  min_sock
+  GIT_REPOSITORY https://github.com/andreacasalino/Minimal-Socket
+  GIT_TAG        master
+)
+FetchContent_MakeAvailable(min_sock)
+else()
+  message(STATUS "Using cached Minimal Socket Lib in ${MIN_SOCKET_SOURCE_DIR}")
+  add_subdirectory(${MIN_SOCKET_SOURCE_DIR} ${CMAKE_BINARY_DIR}/_deps/min_sock-build EXCLUDE_FROM_ALL)
+endif()
+
 # Uncomment if you also want CLI11 (header-only)
 # FetchContent_Declare(
 #   CLI11
@@ -64,6 +79,7 @@ target_link_libraries(scallop PRIVATE
   ftxui::dom
   ftxui::screen
   ${CAPSTONE_LIB}
+  MinimalSocket
   Threads::Threads
   # CLI11::CLI11      # uncomment if enabled CLI11 above
 )
