@@ -7,7 +7,7 @@ Newly rewritten, currently semi-functional pending development. IF YOU ARE LOOKI
 
 ## Motivation
 
-GDB, pwndbg, Ghidra, IDA, 
+GDB, pwndbg, Ghidra, IDA, are the current industry standards in reverse engineering. They are not well optimized for reverse engineering polymorphic binaries. The debuggers statically disassemble memory instead of displaying currently run instructions. They also aren't supported on Windows. The decompilers completely break once you involve polymorphic code.
 
 ## To compile from source 
 
