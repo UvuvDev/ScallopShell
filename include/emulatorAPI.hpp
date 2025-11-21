@@ -5,7 +5,8 @@
 #include <vector>
 #include "memory"
 #include "string"
-#include <MinimalSocket/tcp/TcpClient.h>
+#include "functional"
+#include "socket.hpp"
 
 enum class _EmulType {
     QEMU = 1,
@@ -47,6 +48,8 @@ private:
 
     std::string binaryPath;
     static bool isEmulating;
+
+    static PluginNetwork socket;
 
 public:
 

@@ -1,0 +1,139 @@
+#include <stdio.h>
+#include <inttypes.h>
+#include <string.h>
+#include <errno.h>
+#include <fstream>
+#include "main.hpp"
+#include "debug.hpp"
+
+std::atomic<unsigned long> g_exec_ticks = 0;
+std::atomic<unsigned long> g_last_pc = 0;
+
+static inline std::string safe_disas(struct qemu_plugin_insn *insn)
+{
+    const char *s = qemu_plugin_insn_disas(insn);
+    std::string disasm = s ? s : "";
+
+    return disasm;
+}
+static inline uint64_t insn_size_or_zero(struct qemu_plugin_insn *insn)
+{
+    return qemu_plugin_insn_size(insn);
+}
+
+static std::string classify_insn(std::string d)
+{
+
+    // Handle empty strings
+    if (d.empty())
+        return "other";
+
+    // Get rid of proceeding spaces and tabs by deleting the first letter until a letter is the first character
+    while (d.at(0) == ' ' || d.at(0) == '\t')
+        d.erase(0, 1);
+
+    // If after getting rid of spaces and tabs its empty, handle that too
+    if (d.empty())
+        return "other";
+
+    // The actual classification
+    if (!strncmp(d.c_str(), "jmp", 3))
+        return "jmp";
+    if (d.at(0) == 'j')
+        return "cond";
+    if (!strncmp(d.c_str(), "call", 4))
+        return "call";
+    if (!strncmp(d.c_str(), "ret", 3))
+        return "ret";
+    return "other";
+}
+
+static int parse_imm_target(const char *d, uint64_t *out_target)
+{
+    if (!d)
+        return 0;
+    const char *p = strstr(d, "0x");
+    if (!p)
+        return 0;
+    uint64_t v = 0;
+    if (sscanf(p, "%lx", &v) == 1)
+    {
+        *out_target = v;
+        return 1;
+    }
+    if (sscanf(p, "%" SCNx64, out_target) == 1)
+        return 1;
+    return 0;
+}
+
+struct exec_ctx
+{
+    uint64_t pc, tb_vaddr, fallthrough, branch_target;
+    std::string kind;
+    std::string disas;
+};
+
+static void log(unsigned int vcpu_index, void *udata)
+{
+    auto *ctx = static_cast<exec_ctx *>(udata);
+    if (!ctx || !scallopstate.g_out)
+    {
+        return;
+    }
+
+    //debug("rip = 0x%" PRIx64 "\n", ctx->pc);
+    int written = 0;
+    if (scallopstate.g_log_disas) {
+        written = fprintf(scallopstate.g_out, "0x%" PRIx64 ",%s,%s0x%" PRIx64 ",0x%" PRIx64 ",0x%" PRIx64 ",\"%s\"\n",
+                          ctx->pc, ctx->kind.c_str(), (ctx->branch_target ? "" : ""), ctx->branch_target ? ctx->branch_target : 0,
+                          ctx->fallthrough, ctx->tb_vaddr, ctx->disas.empty() ? "" : ctx->disas.c_str());
+    }
+    else {
+        written = fprintf(scallopstate.g_out, "0x%" PRIx64 ",%s,%s0x%" PRIx64 ",0x%" PRIx64 ",0x%" PRIx64 "\n",
+                          ctx->pc, ctx->kind.c_str(), (ctx->branch_target ? "" : ""), ctx->branch_target ? ctx->branch_target : 0,
+                          ctx->fallthrough, ctx->tb_vaddr);
+    }
+    if (written < 0)
+    {
+        debug("fprintf failed for pc=0x%" PRIx64 ": %s\n", ctx->pc, strerror(errno));
+    }
+    debug("pppp\n");
+    fflush(scallopstate.g_out);
+
+    scallopstate.update();
+    scallopstate.getGates().waitIfNeeded(vcpu_index, ctx->pc);
+    scallopstate.update();
+}
+
+void tb_trans_cb(qemu_plugin_id_t id, struct qemu_plugin_tb *tb)
+{
+
+    // Get the translation block virtual address, and the size of it
+    uint64_t tb_va = qemu_plugin_tb_vaddr(tb);
+    size_t n = qemu_plugin_tb_n_insns(tb);
+
+    // For every instruction in the translated block
+    for (size_t i = 0; i < n; i++)
+    {
+
+        // Get the i'th instruction in the block, and make its metadata
+        struct qemu_plugin_insn *insn = qemu_plugin_tb_get_insn(tb, i);
+        auto *ctx = new exec_ctx();
+
+        ctx->pc = qemu_plugin_insn_vaddr(insn); // Get the virtual address of the instruction
+        ctx->tb_vaddr = tb_va;                  // Virtual address of the block
+        auto disas = safe_disas(insn);
+        ctx->disas = disas;
+        ctx->kind = classify_insn(disas);
+        ctx->branch_target = 0;
+        uint64_t target;
+        if (parse_imm_target(disas.c_str(), &target)) {
+            ctx->branch_target = target;
+        }
+        uint64_t sz = insn_size_or_zero(insn);
+        ctx->fallthrough = sz ? ctx->pc + sz : 0;
+
+        // Set an instruction callback
+        qemu_plugin_register_vcpu_insn_exec_cb(insn, log, QEMU_PLUGIN_CB_RW_REGS, ctx);
+    }
+}

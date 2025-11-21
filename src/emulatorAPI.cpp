@@ -13,7 +13,6 @@
 #include <string.h>
 #include <bits/stdc++.h>
 
-
 // C++
 #include <chrono>
 #include <thread>
@@ -23,133 +22,40 @@
 #include <fstream>
 #include <filesystem>
 #include <unordered_map>
+#include "debug.hpp"
 
 int child_pid_ = -1;
-int sock_fd_   = -1;
+int sock_fd_ = -1;
 
-static constexpr const char* kSockPath   = "/tmp/scallopshell.sock";
-static constexpr const char* kMemDump    = "/tmp/memdump.txt";
-static constexpr const char* kRegDump    = "/tmp/regdump.txt";
-
+static constexpr const char *kMemDump = "/tmp/memdump.txt";
+static constexpr const char *kRegDump = "/tmp/regdump.txt";
 
 bool Emulator::isEmulating = false;
 static std::vector<InstructionInfo> instructionInfo;
-    
+
 int socket_fd() { return sock_fd_; }
 int pid() { return child_pid_; }
 
-static int connectWithRetryUnix(const std::string& path,
-                                std::chrono::milliseconds total_timeout =
-                                    std::chrono::seconds(5),
-                                std::chrono::milliseconds backoff =
-                                    std::chrono::milliseconds(100)) {
-    auto start = std::chrono::steady_clock::now();
-    while (true) {
-        int fd = ::socket(AF_UNIX, SOCK_STREAM, 0);
-        if (fd < 0) return -1;
-
-        sockaddr_un addr{};
-        addr.sun_family = AF_UNIX;
-        if (path.size() >= sizeof(addr.sun_path)) {
-            ::close(fd);
-            errno = ENAMETOOLONG;
-            return -1;
-        }
-        ::strncpy(addr.sun_path, path.c_str(), sizeof(addr.sun_path) - 1);
-
-        if (::connect(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) == 0)
-            return fd;
-
-        int e = errno;
-        ::close(fd);
-        if (std::chrono::steady_clock::now() - start >= total_timeout) {
-            errno = e;
-            return -1;
-        }
-        std::this_thread::sleep_for(backoff);
-    }
-}
-
-static bool connectUnixOnce(const std::string& path, int& out_fd) {
-    
-    int fd = ::socket(AF_UNIX, SOCK_STREAM, 0);
-    if (fd < 0) return false;
-
-    sockaddr_un addr{};
-    addr.sun_family = AF_UNIX;
-    if (path.size() >= sizeof(addr.sun_path)) {
-        ::close(fd);
-        errno = ENAMETOOLONG;
-        return false;
-    }
-    ::strncpy(addr.sun_path, path.c_str(), sizeof(addr.sun_path) - 1);
-
-    if (::connect(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0) {
-        ::close(fd);
-        return false;
-    }
-    out_fd = fd;
-    return true;
-}
-
-static bool readAllFromFd(int fd, std::string& out) {
-    out.clear();
-    char buf[4096];
-    while (true) {
-        ssize_t n = ::recv(fd, buf, sizeof(buf), 0);
-        if (n > 0) {
-            out.append(buf, buf + n);
-        } else if (n == 0) {
-            return true; // peer closed; done
-        } else {
-            if (errno == EINTR) continue;
-            return false;
-        }
-    }
-}
-
-bool sendCommandOnce(const std::string& cmd, std::string* reply) {
-    int fd;
-    if (!connectUnixOnce(kSockPath, fd)) {
-        return false;
-    }
-
-    // Ensure trailing newline (your socat examples send a single line)
-    std::string line = cmd;
-    if (line.empty() || line.back() != '\n') line.push_back('\n');
-
-    ssize_t off = 0;
-    while (off < (ssize_t)line.size()) {
-        ssize_t n = ::send(fd, line.data() + off, line.size() - off, 0);
-        if (n > 0) off += n;
-        else if (n < 0 && errno == EINTR) continue;
-        else { ::close(fd); return false; }
-    }
-
-    bool ok = true;
-    if (reply) {
-        ok = readAllFromFd(fd, *reply);
-    }
-    ::shutdown(fd, SHUT_RDWR);
-    ::close(fd);
-    return ok;
-}
-
-bool readWholeFile(const std::string& path, std::string& out) {
+bool readWholeFile(const std::string &path, std::string &out)
+{
     std::ifstream ifs(path, std::ios::in | std::ios::binary);
-    if (!ifs) return false;
+    if (!ifs)
+        return false;
     out.assign(std::istreambuf_iterator<char>(ifs), std::istreambuf_iterator<char>());
     return true;
 }
 
-bool writeWholeFile(const std::string& path, const std::string& contents) {
+bool writeWholeFile(const std::string &path, const std::string &contents)
+{
     std::ofstream ofs(path, std::ios::out | std::ios::binary | std::ios::trunc);
-    if (!ofs) return false;
+    if (!ofs)
+        return false;
     ofs.write(contents.data(), (std::streamsize)contents.size());
     return ofs.good();
 }
 
-bool writeWholeFile(const std::string& path, const uint8_t* data, int n) {
+bool writeWholeFile(const std::string &path, const uint8_t *data, int n)
+{
     if (!data || n <= 0)
         return false;
 
@@ -157,114 +63,155 @@ bool writeWholeFile(const std::string& path, const uint8_t* data, int n) {
     if (!ofs)
         return false;
 
-    ofs.write(reinterpret_cast<const char*>(data), static_cast<std::streamsize>(n));
+    ofs.write(reinterpret_cast<const char *>(data), static_cast<std::streamsize>(n));
     return ofs.good();
 }
 
-static std::string trim(std::string s) {
+static std::string trim(std::string s)
+{
     size_t a = s.find_first_not_of(" \t\r\n");
-    if (a == std::string::npos) return std::string{};
+    if (a == std::string::npos)
+        return std::string{};
     size_t b = s.find_last_not_of(" \t\r\n");
     return s.substr(a, b - a + 1);
 }
 
-static uint64_t parse_hex(const std::string& s) {
+static uint64_t parse_hex(const std::string &s)
+{
     std::string t = trim(s);
-    if (t.empty() || t == "0" || t == "0x0") return 0ULL;
-    const char* p = t.c_str();
-    if (t.size() > 2 && t[0] == '0' && (t[1] == 'x' || t[1] == 'X')) p += 2;
-    char* end = nullptr;
+    if (t.empty() || t == "0" || t == "0x0")
+        return 0ULL;
+    const char *p = t.c_str();
+    if (t.size() > 2 && t[0] == '0' && (t[1] == 'x' || t[1] == 'X'))
+        p += 2;
+    char *end = nullptr;
     unsigned long long v = std::strtoull(p, &end, 16);
     return static_cast<uint64_t>(v);
 }
 
-static std::vector<std::string> parse_csv(const std::string& line) {
+static std::vector<std::string> parse_csv(const std::string &line)
+{
     std::vector<std::string> out;
     std::string field;
     bool in_quotes = false;
-    for (size_t i = 0; i < line.size(); ++i) {
+    for (size_t i = 0; i < line.size(); ++i)
+    {
         char c = line[i];
-        if (in_quotes) {
-            if (c == '"') {
-                if (i + 1 < line.size() && line[i + 1] == '"') { field.push_back('"'); ++i; }
-                else { in_quotes = false; }
-            } else field.push_back(c);
-        } else {
-            if (c == '"') in_quotes = true;
-            else if (c == ',') { out.push_back(field); field.clear(); }
-            else field.push_back(c);
+        if (in_quotes)
+        {
+            if (c == '"')
+            {
+                if (i + 1 < line.size() && line[i + 1] == '"')
+                {
+                    field.push_back('"');
+                    ++i;
+                }
+                else
+                {
+                    in_quotes = false;
+                }
+            }
+            else
+                field.push_back(c);
+        }
+        else
+        {
+            if (c == '"')
+                in_quotes = true;
+            else if (c == ',')
+            {
+                out.push_back(field);
+                field.clear();
+            }
+            else
+                field.push_back(c);
         }
     }
     out.push_back(field);
     return out;
 }
 
-std::fstream& GotoLine(std::fstream& file, unsigned int num){
+std::fstream &GotoLine(std::fstream &file, unsigned int num)
+{
     file.seekg(std::ios::beg);
-    for(uint i=0; i < num - 1; ++i){
-        file.ignore(std::numeric_limits<std::streamsize>::max(),'\n');
+    for (uint i = 0; i < num - 1; ++i)
+    {
+        file.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     }
     return file;
 }
 
 /*=============== Actual Emulator Functions ===============*/
 
-int Emulator::startEmulation(const std::string& executablePathArg) {
+int Emulator::startEmulation(const std::string &executablePathArg)
+{
     // ---- hardcoded paths (match your shell snippet) ----
-    const std::string qemuSocket = "/tmp/scallopshell.sock";
-    const std::string qemuPath = ( ::getenv("QEMU_BUILD")
-        ? std::string(::getenv("QEMU_BUILD")) + "/qemu-x86_64"
-        : std::string("/home/bradley/Downloads/qemu/build/qemu-x86_64") );
 
-    const std::string qemuTraceLog = "/home/bradley/SoftDev/ScallopShell/qemu.log";
-    const std::string pluginPath   = "/home/bradley/Downloads/qemu/plugins/branchlog.so";
-    const std::string csvPath      = "/home/bradley/SoftDev/ScallopShell/branchlog.csv";
+    // Find the QEMU directory
+    std::string qemuPath = ::getenv("SCALLOP_QEMU_BUILD") ? ::getenv("SCALLOP_QEMU_BUILD") : "";
+    qemuPath += "/qemu-";
+    qemuPath += ::getenv("SYSTEM") ? "system-" : "";
+    qemuPath += ::getenv("ARCH") ? ::getenv("ARCH") : "x86_64";
 
+    // Outputs for QEMU
+    std::string currentWorkingDir = ::getenv("PWD") ? ::getenv("PWD") : "";
+    std::string qemuTraceLog = currentWorkingDir;
+    std::string pluginPath = ::getenv("SCALLOP_QEMU_PLUGIN") ? ::getenv("SCALLOP_QEMU_PLUGIN") : currentWorkingDir + "/qemu-plugins/" ;
+    std::string csvPath = "/tmp";
+    qemuTraceLog += "/qemu.log";
+    std::cout << pluginPath <<std::endl;
+    pluginPath += "/scallop_plugin.so";
+    std::cout << pluginPath <<std::endl;
+    csvPath += "/branchPPPPlog.csv";
+
+    /*
+    OUT_TO_FILE(::getenv("ARCH") ? ::getenv("ARCH") : "<null>");
+    OUT_TO_FILE(" ");
+    OUT_TO_FILE(::getenv("SCALLOP_QEMU_BUILD") ? ::getenv("SCALLOP_QEMU_BUILD") : "<null>");
+    OUT_TO_FILE(" ");
+    OUT_TO_FILE(::getenv("SCALLOP_QEMU_PLUGIN") ? ::getenv("SCALLOP_QEMU_PLUGIN") : "<null>");
+
+    OUT_TO_FILE("\n\n");*/
+
+    // Path to the executable being debugged
     static std::string executablePath = executablePathArg;
 
-    std::ofstream ofs(csvPath,
-                  std::ios::out | std::ios::trunc);
-    ofs.close();
-
-    if (child_pid_ != -1) kill(child_pid_, SIGKILL); // Kill the child process
+    // If there's a child process of QEMU, nuke it
+    if (child_pid_ != -1)
+        kill(child_pid_, SIGKILL); // Kill the child process
 
     // Clean up previous CSV; we can’t glob /tmp/branchlog.*.sock here, but that’s fine.
-    ::unlink(csvPath.c_str());
-
-
+    //::unlink(csvPath.c_str());
 
     // ---- build argv: qemu -d plugin -D <log> -plugin <.so> -- <target> ----
-    std::vector<std::string> args_str;
-    
+    std::vector<std::string> args_str = {
+            qemuPath,
+            "-d", "plugin",
+            "-D", qemuTraceLog,
+            "-plugin", pluginPath,
+            "--",
+            executablePath};
 
-    if (executablePathArg == "") {
-        args_str = {
-        qemuPath,
-        "-d", "plugin",
-        "-D", qemuTraceLog,
-        "-plugin", pluginPath,
-        "--",
-        executablePath };
-    }
-    else {
-        args_str = {
-        qemuPath,
-        "-d", "plugin",
-        "-D", qemuTraceLog,
-        "-plugin", pluginPath,
-        "--",
-        executablePath };
 
+    // If there's a new binary then replace the executable path
+    if (executablePathArg != "") {        
         executablePath = executablePathArg;
     }
 
-    std::vector<char*> argv; argv.reserve(args_str.size()+1);
-    for (auto& s : args_str) argv.push_back(const_cast<char*>(s.c_str()));
+    // Put everything in argv to prepare it for qemu
+    std::vector<char *> argv;
+    argv.reserve(args_str.size() + 1);
+    for (auto &s : args_str) {
+        argv.push_back(const_cast<char *>(s.c_str()));
+        OUT_TO_FILE(s + " ");
+    }
     argv.push_back(nullptr);
+
 
     // ---- set up a pipe to capture child's stdout+stderr ----
     int pipefd[2];
-    if (::pipe(pipefd) != 0) {
+    if (::pipe(pipefd) != 0)
+    {
         perror("pipe");
         return -1;
     }
@@ -272,144 +219,52 @@ int Emulator::startEmulation(const std::string& executablePathArg) {
     // ---- fork/exec QEMU ----
     pid_t pid = ::fork();
 
-    
-    if (pid < 0) {
+    if (pid < 0)
+    {
         perror("fork");
-        ::close(pipefd[0]); ::close(pipefd[1]);
+        ::close(pipefd[0]);
+        ::close(pipefd[1]);
         return -1;
     }
-    if (pid == 0) {
-        // child
-        //::setsid();
+    if (pid == 0)
+    {
+
         // redirect stdout/stderr to pipe write end
-        ::dup2(pipefd[1], STDOUT_FILENO);
-        ::dup2(pipefd[1], STDERR_FILENO);
+        //::dup2(pipefd[1], STDOUT_FILENO);
+        //::dup2(pipefd[1], STDERR_FILENO);
         ::close(pipefd[0]);
         ::close(pipefd[1]);
         ::execv(argv[0], argv.data());
-        perror("execv qemu-x86_64");
+        perror("done with QEMU");
         _exit(127);
     }
 
     child_pid_ = pid;
 
+    // If socket fails to initialize
+    if (socket.initialize() == 0)
+    {
+        perror("socket failed to initialize!");
 
-    // wait up to 10 seconds for /tmp/scallopshell.sock to appear
-    const char* sockPath = "/tmp/scallopshell.sock";
-    for (int i = 0; i < 100; i++) {
-        struct stat st;
-        if (stat(sockPath, &st) == 0 && S_ISSOCK(st.st_mode))
-            break; // socket ready
-        usleep(100000); // 100ms
+
     }
-
 
     // parent
     child_pid_ = pid;
     ::close(pipefd[1]); // parent reads from pipefd[0]
 
-    // open CSV for writing (truncate)
-    int csv_fd = ::open(csvPath.c_str(), O_CREAT | O_TRUNC | O_WRONLY, 0644);
-    if (csv_fd < 0) {
-        perror("open csv");
-        // we’ll still run, just won’t save CSV
-    }
-
-    // Reader thread: pump child output, capture control-socket line, write CSV otherwise
-    int rfd = pipefd[0];
-    std::string captured_sock_path;  // filled when we see the control line
-
-    std::thread pump([rfd, csv_fd, &captured_sock_path]() {
-        char buf[4096];
-        std::string linebuf;
-        auto write_csv_line = [&](const std::string& line) {
-            if (csv_fd >= 0) {
-                // write line + '\n'
-                (void)::write(csv_fd, line.data(), line.size());
-                (void)::write(csv_fd, "\n", 1);
-            }
-        };
-
-        for (;;) {
-            ssize_t n = ::read(rfd, buf, sizeof(buf));
-            if (n <= 0) break;
-            linebuf.append(buf, buf + n);
-            // process complete lines
-            size_t pos;
-            while ((pos = linebuf.find('\n')) != std::string::npos) {
-                std::string line = linebuf.substr(0, pos);
-                // drop trailing \r if any
-                if (!line.empty() && line.back() == '\r') line.pop_back();
-
-                // Detect control-socket announcement:
-                // format: "[branchlog] control socket: /tmp/branchlog.<pid>.sock"
-                static const char* kPrefix = "[branchlog] control socket:";
-                if (line.compare(0, strlen(kPrefix), kPrefix) == 0) {
-                    // take last 'word' as path
-                    size_t sp = line.find_last_of(' ');
-                    if (sp != std::string::npos && sp + 1 < line.size()) {
-                        captured_sock_path = line.substr(sp + 1);
-                    }
-                    // DO NOT write this line to CSV
-                } else {
-                    write_csv_line(line); // pass-through to CSV
-                }
-                linebuf.erase(0, pos + 1);
-            }
-        }
-
-        // flush any partial last line (rare; usually CSV lines end with \n)
-        if (!linebuf.empty()) {
-            // don’t treat as control socket; just write it as a CSV tail line
-            if (csv_fd >= 0) {
-                (void)::write(csv_fd, linebuf.data(), linebuf.size());
-            }
-        }
-
-        if (csv_fd >= 0) ::close(csv_fd);
-        ::close(rfd);
-    });
-
-    // Wait up to ~5s for the socket path to appear, then connect.
-    // (busy-wait with short sleeps to avoid pulling in <condition_variable>)
-    const auto t0 = std::chrono::steady_clock::now();
-    std::string sock_path_seen;
-    while (std::chrono::steady_clock::now() - t0 < std::chrono::seconds(5)) {
-        // copy from the thread's captured string if it has been set
-        // (no mutex; benign data race on read of std::string contents after it stabilizes)
-        if (!sock_path_seen.size()) sock_path_seen = captured_sock_path;
-        if (!sock_path_seen.empty()) break;
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    }
-
-
-    if (!sock_path_seen.empty()) {
-        sock_fd_ = connectWithRetryUnix(sock_path_seen,
-                                        std::chrono::seconds(10),
-                                        std::chrono::milliseconds(100));
-        if (sock_fd_ < 0) {
-            perror("connect to plugin socket");
-            isEmulating = true;
-            // optional: ::kill(child_pid_, SIGTERM);
-        }
-    } else {
-        // didn’t see the control socket line in time
-        // optional: perror-like notice to stderr
-        ::fprintf(stderr, "startEmulation: control socket path not observed\n");
-    }
-
-    // Detach the pump thread; it keeps streaming CSV until QEMU exits.
-    pump.detach();
-
     return child_pid_;
 }
 
-int Emulator::addBreakpoint(uint64_t address, std::string& comment) {
-    (void)address; (void)comment;
+int Emulator::addBreakpoint(uint64_t address, std::string &comment)
+{
+    (void)address;
+    (void)comment;
     return 0;
 }
 
-int Emulator::modifyMemory(uint64_t address, uint8_t* data, int n) {
+int Emulator::modifyMemory(uint64_t address, uint8_t *data, int n)
+{
     if (!data || n <= 0)
         return false;
 
@@ -417,7 +272,8 @@ int Emulator::modifyMemory(uint64_t address, uint8_t* data, int n) {
     std::string memoryDumpWrite;
     memoryDumpWrite.reserve(static_cast<size_t>(n) * 3);
 
-    for (int i = 0; i < n; ++i) {
+    for (int i = 0; i < n; ++i)
+    {
         memoryDumpWrite += hex1ByteStr(data[i]);
         if (((i + 1) % 8) == 0)
             memoryDumpWrite.push_back('\n');
@@ -440,54 +296,68 @@ int Emulator::modifyMemory(uint64_t address, uint8_t* data, int n) {
     char cmd[128];
     std::snprintf(cmd, sizeof(cmd), "set memory 0x%llx;0x%llx\n",
                   (unsigned long long)address, (unsigned long long)hi);
-    if (!sendCommandOnce(cmd, &ret))
+    if (socket.sendCommand(cmd).compare(0, 2, "ok"))
         return false;
     return ret.rfind("ok", 0) == 0;
 }
 
-int Emulator::focusMemory(uint64_t lowAddress, uint64_t highAddress) {
+int Emulator::focusMemory(uint64_t lowAddress, uint64_t highAddress)
+{
     std::string ret;
-    bool exitCode = sendCommandOnce(std::to_string(lowAddress) + ';' + std::to_string(highAddress) + '\n', &ret);
-    return exitCode;
+    std::string exit = socket.sendCommand(std::to_string(lowAddress) + ';' + std::to_string(highAddress) + '\n');
+    return 0;
 }
 
-namespace {
-struct MemoryCache {
-    bool tryUpdateAgain = false;
-    int modificationsMade = 0;
-    int targetModifications = 0;
-    uint64_t address = std::numeric_limits<uint64_t>::max();
-    int span = -1;
-    std::vector<uint8_t> data;
-};
+namespace
+{
+    struct MemoryCache
+    {
+        bool tryUpdateAgain = false;
+        int modificationsMade = 0;
+        int targetModifications = 0;
+        uint64_t address = std::numeric_limits<uint64_t>::max();
+        int span = -1;
+        std::vector<uint8_t> data;
+    };
 
-static std::unordered_map<std::string, MemoryCache>& memoryCaches() {
-    static std::unordered_map<std::string, MemoryCache> caches;
-    return caches;
-}
+    static std::unordered_map<std::string, MemoryCache> &memoryCaches()
+    {
+        static std::unordered_map<std::string, MemoryCache> caches;
+        return caches;
+    }
 } // namespace
 
-std::vector<uint8_t>* Emulator::getMemory(uint64_t address, int n, bool _update,
-                                          int targetMods, const std::string& cacheKey) {
-    auto& cache = memoryCaches()[cacheKey];
+std::vector<uint8_t> *Emulator::getMemory(uint64_t address, int n, bool _update,
+                                          int targetMods, const std::string &cacheKey)
+{
+    auto &cache = memoryCaches()[cacheKey];
     const uint64_t kNoAddress = std::numeric_limits<uint64_t>::max();
+
+    
 
     if (address != kNoAddress)
         cache.address = address;
     if (n != -1)
         cache.span = n;
 
-    if (cache.address == kNoAddress || cache.span <= 0)
+    if (cache.address == kNoAddress || cache.span <= 0) {
+        OUT_TO_FILE("A\n");
         return &cache.data;
-
-    if (!_update && !cache.tryUpdateAgain)
+    }
+    if (!_update && !cache.tryUpdateAgain) {
+        OUT_TO_FILE("B\n");
         return &cache.data;
+    }
 
-    if (targetMods != -1)
+    if (targetMods != -1) {
+        OUT_TO_FILE("C\n");
         cache.targetModifications = targetMods;
+    }
 
-    if (!_update)
+    if (!_update) {
+        OUT_TO_FILE("D\n");
         return &cache.data;
+    }
 
     uint64_t span = static_cast<uint64_t>(cache.span - 1);
     uint64_t hi = cache.address;
@@ -496,46 +366,62 @@ std::vector<uint8_t>* Emulator::getMemory(uint64_t address, int n, bool _update,
     else
         hi = cache.address + span;
 
-    std::string ret;
     char cmd[128];
-    std::snprintf(cmd, sizeof(cmd), "get memory 0x%llx;0x%llx\n",
-                  (unsigned long long)cache.address, (unsigned long long)hi);
-    if (!sendCommandOnce(cmd, &ret) || ret.rfind("ok", 0) != 0) {
+    std::snprintf(cmd, sizeof(cmd), "get memory 0x%llx %d\n",
+                  (unsigned long long)cache.address, n);
+
+    OUT_TO_FILE(cmd);
+
+    if (socket.sendCommand(cmd).compare(0, 2, "ok"))
+    {
         cache.tryUpdateAgain = true;
         return &cache.data;
     }
 
+
+    OUT_TO_FILE("sent command!\n");
+
+
     std::ifstream memoryFile(kMemDump, std::ios::in);
-    if (!memoryFile.is_open()) {
+    if (!memoryFile.is_open())
+    {
+
+        OUT_TO_FILE("mem file not open\n");
+
         cache.tryUpdateAgain = true;
         return &cache.data;
     }
 
     std::vector<std::string> bytes;
     std::string memoryDumpLine;
-    while (std::getline(memoryFile, memoryDumpLine)) {
+    while (std::getline(memoryFile, memoryDumpLine))
+    {
         std::stringstream check1(memoryDumpLine);
         std::string intermediate;
-        while (std::getline(check1, intermediate, ' ')) {
+        while (std::getline(check1, intermediate, ' '))
+        {
             if (!intermediate.empty())
                 bytes.push_back(intermediate);
         }
     }
 
-    if (bytes.empty()) {
+    if (bytes.empty())
+    {
         cache.tryUpdateAgain = true;
         return &cache.data;
     }
 
     cache.data.clear();
     cache.data.reserve(bytes.size());
-    for (const auto& byte : bytes) {
+    for (const auto &byte : bytes)
+    {
         uint8_t byteInt = 0;
         if (sscanf(byte.c_str(), "%hhx", &byteInt) == 1)
             cache.data.emplace_back(byteInt);
     }
 
-    if (cache.data.empty()) {
+    if (cache.data.empty())
+    {
         cache.tryUpdateAgain = true;
         return &cache.data;
     }
@@ -543,16 +429,22 @@ std::vector<uint8_t>* Emulator::getMemory(uint64_t address, int n, bool _update,
     if (cache.data.size() > static_cast<size_t>(cache.span))
         cache.data.resize(static_cast<size_t>(cache.span));
 
-    if (cache.targetModifications > 0) {
+    if (cache.targetModifications > 0)
+    {
         cache.modificationsMade++;
-        if (cache.modificationsMade >= cache.targetModifications) {
+        if (cache.modificationsMade >= cache.targetModifications)
+        {
             cache.targetModifications = 0;
             cache.modificationsMade = 0;
             cache.tryUpdateAgain = false;
-        } else {
+        }
+        else
+        {
             cache.tryUpdateAgain = true;
         }
-    } else {
+    }
+    else
+    {
         cache.modificationsMade = 0;
         cache.tryUpdateAgain = false;
     }
@@ -560,98 +452,128 @@ std::vector<uint8_t>* Emulator::getMemory(uint64_t address, int n, bool _update,
     return &cache.data;
 }
 
-std::vector<std::string>* Emulator::getRegisters(bool _update) {
-    static bool dirty = true;
+std::vector<std::string> *Emulator::getRegisters(bool _update)
+{
+    static bool tryagain = true;
     static std::vector<std::string> registers;
 
-    if (_update) {
-        dirty = true;
+    if (_update)
+    {
+        tryagain = true;
     }
 
-    if (!dirty && !registers.empty()) {
+    if (!tryagain)
+    {
         return &registers;
     }
 
+    // Request registers
+    if (socket.sendCommand("get registers\n").compare(0, 2, "ok"))
+    {
+        OUT_TO_FILE("got ok\n");
+        return &registers;
+    }
+    else {
+        OUT_TO_FILE("still sent the command but no ok\n");
+    }    
+
+    // Open regdump
     std::ifstream regDump(kRegDump, std::ios::in);
-    if (!regDump.is_open()) {
+    if (!regDump.is_open())
+    {
         return &registers;
     }
 
     std::vector<std::string> registersTemp;
     std::string line;
-    while (std::getline(regDump, line)) {
-        if (!line.empty()) {
+    while (std::getline(regDump, line))
+    {
+        if (!line.empty())
+        {
             registersTemp.emplace_back(line);
         }
     }
     regDump.close();
 
-    if (!registersTemp.empty()) {
+    if (!registersTemp.empty())
+    {
         registers = std::move(registersTemp);
-        dirty = false;
+        tryagain = false;
     }
 
     return &registers;
 }
 
-int Emulator::setRegister(std::string reg_name, uint64_t value) {
-    (void)reg_name; (void)value;
+int Emulator::setRegister(std::string reg_name, uint64_t value)
+{
+    (void)reg_name;
+    (void)value;
     return 0;
 }
 
 std::shared_ptr<std::pair<uint64_t, uint64_t>>
-Emulator::getInstructionJumpPaths(uint64_t address) {
+Emulator::getInstructionJumpPaths(uint64_t address)
+{
     (void)address;
     return nullptr;
 }
 
-int Emulator::step(int steps) {
+int Emulator::step(int steps)
+{
     std::string ret;
-    bool exitCode = sendCommandOnce("step " + std::to_string(steps) + "\n", &ret);
+    bool exitCode = socket.sendCommand(std::string("step ") + std::to_string(steps)).compare(0, 2, "ok");
     getRegisters(true); // mark cached registers dirty so UI reloads from file
     return exitCode;
 }
 
-int Emulator::continueExec() {
+int Emulator::continueExec()
+{
     std::string ret;
-    return sendCommandOnce("resume\n", &ret);
-
+    return socket.sendCommand("resume").compare(0, 2, "ok");
 }
 
 std::string Emulator::disassembleInstruction(uint64_t address,
-                                             std::shared_ptr<uint8_t> data, int n) {
-    (void)address; (void)data; (void)n;
+                                             std::shared_ptr<uint8_t> data, int n)
+{
+    (void)address;
+    (void)data;
+    (void)n;
     return {};
 }
 
-bool Emulator::getIsEmulating() {
+bool Emulator::getIsEmulating()
+{
     return isEmulating;
 }
 
-std::vector<InstructionInfo>* Emulator::getRunInstructions(int start_line, int n, int* updated) {
-    static const char* kCsvPath = "/home/bradley/SoftDev/ScallopShell/branchlog.csv";
+std::vector<InstructionInfo> *Emulator::getRunInstructions(int start_line, int n, int *updated)
+{
+    static const char *kCsvPath = "/tmp/branchlog.csv";
 
     // simple cache of the last request & file state
     static int cached_start = -1, cached_n = -1;
     static uintmax_t cached_size = 0;
     static std::time_t cached_mtime = 0;
 
+    
     // check file state
     std::error_code ec;
     auto sz = std::filesystem::file_size(kCsvPath, ec);
     std::time_t mt = 0;
-    if (ec) {
+    if (ec)
+    {
         std::filesystem::file_time_type ft = std::filesystem::last_write_time(kCsvPath, ec);
-        if (!ec) {
+        if (!ec)
+        {
             auto sctp = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
-                ft - std::filesystem::file_time_type::clock::now()
-                + std::chrono::system_clock::now());
+                ft - std::filesystem::file_time_type::clock::now() + std::chrono::system_clock::now());
             mt = std::chrono::system_clock::to_time_t(sctp);
         }
     }
 
     // serve from cache if request & file are unchanged
-    if (cached_start == start_line && cached_n == n && sz == cached_size && mt == cached_mtime) {
+    if (cached_start == start_line && cached_n == n && sz == cached_size && mt == cached_mtime)
+    {
         *updated = 0;
         return &instructionInfo;
     }
@@ -660,21 +582,28 @@ std::vector<InstructionInfo>* Emulator::getRunInstructions(int start_line, int n
 
     // open fresh each call (cheap, robust)
     std::ifstream f(kCsvPath, std::ios::in | std::ios::binary);
-    if (!f) {
+    if (!f)
+    {
         // file not there yet; keep buffer empty and update cache keys
-        cached_start = start_line; cached_n = n; cached_size = sz; cached_mtime = mt;
+        cached_start = start_line;
+        cached_n = n;
+        cached_size = sz;
+        cached_mtime = mt;
         return &instructionInfo;
     }
 
     // Alert the caller that there's new instructions
-    if (updated != nullptr) *updated = true;
+    if (updated != nullptr)
+        *updated = true;
 
     // read first line (header) and discard it if it isn't a PC like 0x...
     std::string line;
-    if (std::getline(f, line)) {
+    if (std::getline(f, line))
+    {
         std::string t = trim(line);
         bool looks_pc = t.size() >= 3 && t[0] == '0' && (t[1] == 'x' || t[1] == 'X');
-        if (looks_pc) {
+        if (looks_pc)
+        {
             // header missing; that was actually data → process below by treating it as row 0
             // Rewind to beginning of file and skip zero lines logic will re-read it.
             f.clear();
@@ -684,47 +613,71 @@ std::vector<InstructionInfo>* Emulator::getRunInstructions(int start_line, int n
     // now skip the header line (we already consumed it if it was a true header)
     // and fast-skip start_line rows
     int to_skip = start_line;
-    while (to_skip-- > 0 && std::getline(f, line)) {
+    while (to_skip-- > 0 && std::getline(f, line))
+    {
         // discard
     }
 
     // read up to n data lines
     int added = 0;
-    while ((n <= 0 || added < n) && std::getline(f, line)) {
+    while ((n <= 0 || added < n) && std::getline(f, line))
+    {
         std::string s = trim(line);
-        if (s.empty()) continue;
+        if (s.empty())
+            continue;
 
         // must be a data row: first column starts with 0x
         auto cols = parse_csv(s);
-        if (cols.size() < 6) continue;
-        const std::string& c0 = cols[0];
-        if (c0.size() < 3 || !(c0[0] == '0' && (c0[1] == 'x' || c0[1] == 'X'))) continue;
+        if (cols.size() < 5)
+            continue;
+        const std::string &c0 = cols[0];
+        if (c0.size() < 3 || !(c0[0] == '0' && (c0[1] == 'x' || c0[1] == 'X')))
+            continue;
 
-        uint64_t pc  = parse_hex(cols[0]);
+        uint64_t pc = parse_hex(cols[0]);
         std::string disType = trim(cols[1]);
-        uint64_t bt  = parse_hex(cols[2]);
-        uint64_t ft  = parse_hex(cols[3]);
-        std::string dis = trim(cols[5]);
+        uint64_t bt = parse_hex(cols[2]);
+        uint64_t ft = parse_hex(cols[3]);
+        std::string dis;
+        if (cols.size() >= 6)
+            dis = trim(cols[5]);
+        else
+            dis.clear();
 
         // fallback classify if kind ever blank
-        if (disType.empty()) {
-            size_t i=0; while (i<dis.size() && std::isspace((unsigned char)dis[i])) ++i;
-            size_t j=i; while (j<dis.size() && !std::isspace((unsigned char)dis[j])) ++j;
-            std::string m = dis.substr(i, j-i);
-            for (char& c: m) c = (char)std::tolower((unsigned char)c);
-            if (m == "ret" || m == "retq" || m == "retn" || m == "iret") disType = "ret";
-            else if (m == "jmp" || m == "ljmp") disType = "jmp";
-            else if (m == "call" || m == "callq" || m == "lcall") disType = "call";
-            else if (!m.empty() && m[0]=='j' && m!="jmp") disType = "cond";
-            else disType = "other";
+        if (disType.empty())
+        {
+            size_t i = 0;
+            while (i < dis.size() && std::isspace((unsigned char)dis[i]))
+                ++i;
+            size_t j = i;
+            while (j < dis.size() && !std::isspace((unsigned char)dis[j]))
+                ++j;
+            std::string m = dis.substr(i, j - i);
+            for (char &c : m)
+                c = (char)std::tolower((unsigned char)c);
+            if (m == "ret" || m == "retq" || m == "retn" || m == "iret")
+                disType = "ret";
+            else if (m == "jmp" || m == "ljmp")
+                disType = "jmp";
+            else if (m == "call" || m == "callq" || m == "lcall")
+                disType = "call";
+            else if (!m.empty() && m[0] == 'j' && m != "jmp")
+                disType = "cond";
+            else
+                disType = "other";
         }
 
         instructionInfo.emplace_back(std::move(dis), std::move(disType), pc, bt, ft, bt ? 1u : 0u);
+        OUT_TO_FILE(dis);
         ++added;
     }
 
     *updated = added;
     // update cache keys
-    cached_start = start_line; cached_n = n; cached_size = sz; cached_mtime = mt;
+    cached_start = start_line;
+    cached_n = n;
+    cached_size = sz;
+    cached_mtime = mt;
     return &instructionInfo;
 }
