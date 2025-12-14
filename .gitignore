@@ -1,2 +1,5 @@
 build/
 compile_commands.json
+DEBUG_LOG.txt
+error.txt
+qemu.log 

@@ -1,2 +1,0 @@
-- Look into behavior of live patching system - it may not always work after a few tries.
-- Switching between components is very weird.

@@ -242,7 +242,7 @@ int Emulator::startEmulation(const std::string &executablePathArg)
     child_pid_ = pid;
 
     // If socket fails to initialize
-    if (socket.initialize() == 0)
+    if (socket.initialize() != 0)
     {
         perror("socket failed to initialize!");
 
@@ -296,7 +296,7 @@ int Emulator::modifyMemory(uint64_t address, uint8_t *data, int n)
     char cmd[128];
     std::snprintf(cmd, sizeof(cmd), "set memory 0x%llx;0x%llx\n",
                   (unsigned long long)address, (unsigned long long)hi);
-    if (socket.sendCommand(cmd).compare(0, 2, "ok"))
+    if (socket.sendCommand(cmd).compare(0, 2, "ok") != 0)
         return false;
     return ret.rfind("ok", 0) == 0;
 }
@@ -372,7 +372,7 @@ std::vector<uint8_t> *Emulator::getMemory(uint64_t address, int n, bool _update,
 
     OUT_TO_FILE(cmd);
 
-    if (socket.sendCommand(cmd).compare(0, 2, "ok"))
+    if (socket.sendCommand(cmd).compare(0, 2, "ok") != 0)
     {
         cache.tryUpdateAgain = true;
         return &cache.data;
@@ -468,7 +468,7 @@ std::vector<std::string> *Emulator::getRegisters(bool _update)
     }
 
     // Request registers
-    if (socket.sendCommand("get registers\n").compare(0, 2, "ok"))
+    if (socket.sendCommand("get registers\n").compare(0, 2, "ok") != 0)
     {
         OUT_TO_FILE("got ok\n");
         return &registers;
@@ -521,7 +521,7 @@ Emulator::getInstructionJumpPaths(uint64_t address)
 int Emulator::step(int steps)
 {
     std::string ret;
-    bool exitCode = socket.sendCommand(std::string("step ") + std::to_string(steps)).compare(0, 2, "ok");
+    bool exitCode = socket.sendCommand(std::string("step ") + std::to_string(steps)).compare(0, 2, "ok") != 0;
     getRegisters(true); // mark cached registers dirty so UI reloads from file
     return exitCode;
 }
@@ -529,7 +529,7 @@ int Emulator::step(int steps)
 int Emulator::continueExec()
 {
     std::string ret;
-    return socket.sendCommand("resume").compare(0, 2, "ok");
+    return socket.sendCommand("resume").compare(0, 2, "ok") != 0;
 }
 
 std::string Emulator::disassembleInstruction(uint64_t address,
