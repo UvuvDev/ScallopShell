@@ -1,23 +1,11 @@
 #include "memorydump.hpp"
 #include "debug.hpp"
 
-
 /**
- * 
- */
-static inline int hx(int c)
-{
-    if ('0' <= c && c <= '9')
-        return c - '0';
-    if ('a' <= c && c <= 'f')
-        return 10 + (c - 'a');
-    if ('A' <= c && c <= 'F')
-        return 10 + (c - 'A');
-    return -1;
-}
-
-/**
- * 
+ * Print out a hexdump of bytes size N. Space between every byte, every 8 bytes gets a newline.
+ * @param f File to save the printout to
+ * @param p Pointer to the buffer containing bytes
+ * @param n How many bytes to read
  */
 static void write_hex_dump(FILE *f, const uint8_t *p, size_t n)
 {
@@ -68,6 +56,12 @@ static bool try_chunked_memread(uint64_t base, size_t len, GByteArray *buf)
     return any;
 }
 
+/**
+ * Dump memory from the program
+ * @param address Which address to request
+ * @param n How many bytes are requested
+ * @param ok ????
+ */
 int memDump(uint64_t address, int n, bool* ok) {
 
     // Verify validity

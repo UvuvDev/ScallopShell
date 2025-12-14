@@ -9,6 +9,10 @@
 std::atomic<unsigned long> g_exec_ticks = 0;
 std::atomic<unsigned long> g_last_pc = 0;
 
+/**
+ * Disassemble a given qemu instruction with error handling.
+ * @param insn Instruction to analyze.
+ */
 static inline std::string safe_disas(struct qemu_plugin_insn *insn)
 {
     const char *s = qemu_plugin_insn_disas(insn);
@@ -16,11 +20,20 @@ static inline std::string safe_disas(struct qemu_plugin_insn *insn)
 
     return disasm;
 }
+
+
 static inline uint64_t insn_size_or_zero(struct qemu_plugin_insn *insn)
 {
     return qemu_plugin_insn_size(insn);
 }
 
+/**
+ * Identify what type of instruction it is in regards to branching. A Jmp
+ * instruction that will always be taken is different than a conditional,
+ * which will only sometimes be taken, and it is also different than a regular
+ * mov instruction which will go to the fallthrough address every time.
+ * @param d Disassembled instruction in std::string form.
+ */
 static std::string classify_insn(std::string d)
 {
 
@@ -48,6 +61,9 @@ static std::string classify_insn(std::string d)
     return "other";
 }
 
+/**
+ * ?????
+ */
 static int parse_imm_target(const char *d, uint64_t *out_target)
 {
     if (!d)
@@ -73,6 +89,11 @@ struct exec_ctx
     std::string disas;
 };
 
+/**
+ * This is the function that outputs branching information to the CSV.
+ * @param vcpu_index Which CPU to query 
+ * @param udata The exec_ctx which will be logged.
+ */
 static void log(unsigned int vcpu_index, void *udata)
 {
     auto *ctx = static_cast<exec_ctx *>(udata);
@@ -80,6 +101,9 @@ static void log(unsigned int vcpu_index, void *udata)
     {
         return;
     }
+
+    // Track current PC for accurate register dumps
+    scallopstate.current_pc_.store(ctx->pc, std::memory_order_relaxed);
 
     //debug("rip = 0x%" PRIx64 "\n", ctx->pc);
     int written = 0;
@@ -105,6 +129,9 @@ static void log(unsigned int vcpu_index, void *udata)
     scallopstate.update();
 }
 
+/**
+ * 
+ */
 void tb_trans_cb(qemu_plugin_id_t id, struct qemu_plugin_tb *tb)
 {
 

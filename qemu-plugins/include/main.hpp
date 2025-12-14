@@ -68,9 +68,13 @@ private:
 
     mutable std::mutex requests_mutex_;
     std::unique_ptr<ScallopSocket> socket_;
+
+    GateManager gates;
     
-    GateManager gates; 
 public:
+
+    std::atomic<uint64_t> current_pc_{0};
+
     // File paths for output
     static char g_mem_path[256];
     static char g_reg_path[256];

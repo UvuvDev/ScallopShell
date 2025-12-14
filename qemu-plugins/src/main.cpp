@@ -24,6 +24,9 @@ namespace {
 std::atomic<bool> request_worker_running{false};
 std::thread request_worker;
 
+/**
+ * Check requests every 1 millisecond. Run once!!!!!!
+ */
 void start_request_worker() {
     bool expected = false;
     if (!request_worker_running.compare_exchange_strong(expected, true)) {
@@ -37,6 +40,9 @@ void start_request_worker() {
     });
 }
 
+/**
+ * Kill the thread handling requests.
+ */
 void stop_request_worker() {
     bool expected = true;
     if (!request_worker_running.compare_exchange_strong(expected, false)) {
@@ -50,6 +56,10 @@ void stop_request_worker() {
 
 namespace
 {
+    /**
+     * Normalizes all requests to be lowercase, no newlines or carriage returns, 
+     * keeps whitespace to max one character, and leaves non ASCII bytes untouched.
+     */
     std::string normalize_request(const std::string &input)
     {
         std::string normalized;
@@ -111,7 +121,13 @@ SCALLOP_REQUEST_TYPE scallop_request::getImportance()
 
 /*=========================*/
 
-scallop_request ScallopState::highestPriorityReq()
+/**
+ * It orders requests by importance: if you do one thing before the other, information may be wrong. For example,
+ * if you step before you set memory or set a register, it won't set at the assumed time, 
+ * making the program update the instruction AFTER it was supposed to. If you get mem or 
+ * get reg before you step, you won't have the updated memory and changes won't be made correctly.
+ */
+scallop_request ScallopState::highestPriorityReq(bool allow_qemu_ops)
 {
     std::lock_guard<std::mutex> lock(requests_mutex_);
 
@@ -135,6 +151,10 @@ scallop_request ScallopState::highestPriorityReq()
     return highestRequest;
 }
 
+/**
+ * Identify the type of request that was sent over, and assign the proper enum for it.
+ * This keeps code organized and prevents unnecessary string comparison boilerplate
+ */
 SCALLOP_REQUEST_TYPE ScallopState::classifyRequest(const std::string &request) const
 {
     std::string normalized = normalize_request(request);
@@ -171,6 +191,9 @@ SCALLOP_REQUEST_TYPE ScallopState::classifyRequest(const std::string &request) c
     return SCALLOP_REQUEST_TYPE::defaultReq;
 }
 
+/**
+ * 
+ */
 void ScallopState::enqueueRawRequest(const std::string &request)
 {
     const auto importance = classifyRequest(request);
@@ -178,12 +201,18 @@ void ScallopState::enqueueRawRequest(const std::string &request)
     requests.emplace_back(request, importance);
 }
 
+/**
+ * Attach the TCP socket to the ScallopState
+ */
 void ScallopState::attachSocket(std::unique_ptr<ScallopSocket> socket)
 {
     std::lock_guard<std::mutex> lock(requests_mutex_);
     socket_ = std::move(socket);
 }
 
+/**
+ * @return ScallopSocket socket
+ */
 ScallopSocket *ScallopState::socket()
 {
     std::lock_guard<std::mutex> lock(requests_mutex_);
@@ -201,10 +230,18 @@ GateManager &ScallopState::getGates()
     return gates;
 }
 
-int ScallopState::update()
+/**
+ * This runs through the queue of requests that the front end made. It does it in order of
+ * importance: if you do one thing before the other, information may be wrong. For example,
+ * if you step before you set memory or set a register, it won't set at the assumed time, 
+ * making the program update the instruction AFTER it was supposed to. If you get mem or 
+ * get reg before you step, you won't have the updated memory and changes won't be made correctly.
+ */
+int ScallopState::update(bool allow_qemu_ops)
 {
-    scallop_request req("", SCALLOP_REQUEST_TYPE::defaultReq);
-    while ((req = highestPriorityReq()).getImportance() != SCALLOP_REQUEST_TYPE::defaultReq)
+
+    scallop_request req("", SCALLOP_REQUEST_TYPE::defaultReq); // Default initialize
+    while ((req = highestPriorityReq(false)).getImportance() != SCALLOP_REQUEST_TYPE::defaultReq)
     {
         bool ok;
         switch (req.getImportance())
@@ -236,6 +273,9 @@ int ScallopState::update()
     return 0;
 }
 
+/**
+ * Handle when the plugin is told to die.
+ */
 static void plugin_exit(qemu_plugin_id_t id, void *u)
 {
     scallopstate.getGates().pauseAll();
@@ -248,6 +288,9 @@ static void plugin_exit(qemu_plugin_id_t id, void *u)
     }
 }
 
+/**
+ * On initialization
+ */
 QEMU_PLUGIN_EXPORT
 int qemu_plugin_install(qemu_plugin_id_t id, const qemu_info_t *info, int argc, char **argv)
 {
