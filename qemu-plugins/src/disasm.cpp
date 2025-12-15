@@ -123,8 +123,8 @@ static void log(unsigned int vcpu_index, void *udata)
     fflush(scallopstate.g_out);
 
     vcpu_current_thread_index = vcpu_index;
-    regDump();
-    memDump();
+    //regDump();
+    //memDump();
 
     scallopstate.update();
     scallopstate.getGates().waitIfNeeded(vcpu_index, ctx->pc);

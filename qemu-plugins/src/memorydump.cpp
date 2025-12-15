@@ -72,7 +72,8 @@ int memDump() {
     // I'm sorry for how this looks. I tried my best ):
     scallop_mem_arguments* memDumpArgs = (scallop_mem_arguments*)scallopstate.vcpu_op[vcpu_current_thread_index].arguments[VCPU_OP_DUMP_MEM].load(std::memory_order_relaxed);
 
-    debug("%llx", memDumpArgs);
+    debug("addr = %llx\n", memDumpArgs->mem_addr);
+    debug("N = %d\n", memDumpArgs->mem_size);
 
     uint64_t address = memDumpArgs->mem_addr;
     int n = memDumpArgs->mem_size;
@@ -82,18 +83,18 @@ int memDump() {
 
     // Verify validity
     if (address == 0)  {
-        free(memDumpArgs);
+        
         return 1;
     }
     if (n == 0) { 
-        free(memDumpArgs);
+        
         return 1;
     }
 
     // Make a GByteArray
     GByteArray *buf = g_byte_array_sized_new(n);
     if (!buf)  {// If failed to init, return fail
-        free(memDumpArgs);
+        
         return 1;
     }
 
@@ -131,7 +132,7 @@ int memDump() {
             address, n);
     }
     g_byte_array_free(buf, TRUE);
-    free(memDumpArgs);
+    
 
 
     debug("ret from memdump\n");

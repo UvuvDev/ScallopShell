@@ -301,8 +301,6 @@ namespace ScallopUI
 
                 for (int r = top_row_; r < end_row && data_ != nullptr && !data_->empty(); ++r)
                 {
-
-                    //printf("%p RELEASE MEEEEE\n", data_);
                     
                     size_t start = static_cast<size_t>(r) * bpr_;
 

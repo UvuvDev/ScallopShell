@@ -271,7 +271,12 @@ int ScallopState::update(int vcpu)
 
             vcpu_op[vcpu].flags |= vcpu_operation_t::VCPU_OP_DUMP_MEM; // Set the flag
 
-            scallop_mem_arguments *memArgs = new scallop_mem_arguments; // Init args (callee must free!!!!)
+            scallop_mem_arguments* memArgs;
+            
+            if (vcpu_op[vcpu].arguments[vcpu_operation_t::VCPU_OP_DUMP_MEM] == 0) {
+                memArgs = new scallop_mem_arguments;
+            }
+            // Init args (callee must free!!!!)
             memArgs->mem_addr = addr;
             memArgs->mem_size = n;
 

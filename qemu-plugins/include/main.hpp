@@ -60,6 +60,12 @@ typedef enum {
 struct vcpu_pending_ops {
     std::atomic_uint64_t flags;
     std::atomic<void*> arguments[64];
+
+    vcpu_pending_ops() : flags(0) {
+        for (int i = 0; i < 64; i++) {
+            arguments[i].store(nullptr, std::memory_order_relaxed);
+        }
+    }
 };
 
 typedef struct {
@@ -108,7 +114,7 @@ public:
     static FILE *g_out;
     static int g_log_disas;
 
-    vcpu_pending_ops vcpu_op[MAX_VCPUS] = {0};
+    vcpu_pending_ops vcpu_op[MAX_VCPUS];
 
     std::vector<scallop_request> requests;
 
