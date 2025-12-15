@@ -50,7 +50,7 @@ bool ScallopSocket::start(MinimalSocket::Port port) {
         return false;
     }
 
-    debug("open port %d", port);
+    debug("open port %d\n", port);
     bound_port_ = port;
     running_ = true;
     accept_thread_ = std::thread(&ScallopSocket::acceptLoop, this);

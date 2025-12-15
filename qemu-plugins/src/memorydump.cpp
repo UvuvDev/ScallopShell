@@ -23,7 +23,7 @@ static void write_hex_dump(FILE *f, const uint8_t *p, size_t n)
 
 
 /**
- * Not entirely sure what this does? Codex did this
+ * Read memory in discrete chunks
  */
 static bool try_chunked_memread(uint64_t base, size_t len, GByteArray *buf)
 {
@@ -58,21 +58,44 @@ static bool try_chunked_memread(uint64_t base, size_t len, GByteArray *buf)
 
 /**
  * Dump memory from the program
- * @param address Which address to request
- * @param n How many bytes are requested
- * @param ok ????
  */
-int memDump(uint64_t address, int n, bool* ok) {
+int memDump() {
+
+    debug("memdump started\n");
+
+    debug("vcpu index = %d: ", vcpu_current_thread_index );
+    debug("flags = %llx\n", scallopstate.vcpu_op[vcpu_current_thread_index].flags.load(std::memory_order_relaxed));
+
+    if ( scallopstate.vcpu_op[vcpu_current_thread_index].flags.load(std::memory_order_relaxed) != VCPU_OP_DUMP_MEM) {
+        return -1;
+    }
+    // I'm sorry for how this looks. I tried my best ):
+    scallop_mem_arguments* memDumpArgs = (scallop_mem_arguments*)scallopstate.vcpu_op[vcpu_current_thread_index].arguments[VCPU_OP_DUMP_MEM].load(std::memory_order_relaxed);
+
+    debug("%llx", memDumpArgs);
+
+    uint64_t address = memDumpArgs->mem_addr;
+    int n = memDumpArgs->mem_size;
+
+
+    debug("arguments set\n");
 
     // Verify validity
-    if (address == 0) return 1;
-    if (n == 0) return 1;
-
+    if (address == 0)  {
+        free(memDumpArgs);
+        return 1;
+    }
+    if (n == 0) { 
+        free(memDumpArgs);
+        return 1;
+    }
 
     // Make a GByteArray
     GByteArray *buf = g_byte_array_sized_new(n);
-    if (!buf) // If failed to init, return fail
+    if (!buf)  {// If failed to init, return fail
+        free(memDumpArgs);
         return 1;
+    }
 
     // Set the size
     g_byte_array_set_size(buf, n);
@@ -98,8 +121,6 @@ int memDump(uint64_t address, int n, bool* ok) {
         {
             write_hex_dump(f, buf->data, buf->len);
             fclose(f);
-            if (ok)
-                *ok = true;
             debug("[mem] wrote %zu bytes from 0x%016" PRIx64 " to %s\n",
                 buf->len, address, path);
         }
@@ -110,7 +131,16 @@ int memDump(uint64_t address, int n, bool* ok) {
             address, n);
     }
     g_byte_array_free(buf, TRUE);
+    free(memDumpArgs);
+
+
+    debug("ret from memdump\n");
 
     return 0;
 
 }
+
+/*
+int enqueueMemDump(uint64_t address, int n, bool* ok) {
+    qemu_plugin_vcpu_for_each(scallopstate.getID(), memDump(address, n, ok))
+}*/

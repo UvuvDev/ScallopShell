@@ -5,6 +5,7 @@
 #include "socket.hpp"
 #include "gate.hpp"
 #include "disasm.hpp"
+#include "setreg.hpp"
 
 #include <atomic>
 #include <dlfcn.h>
@@ -12,6 +13,7 @@
 #include <chrono>
 
 QEMU_PLUGIN_EXPORT int qemu_plugin_version = QEMU_PLUGIN_VERSION;
+int vcpu_current_thread_index = 0;
 
 char ScallopState::g_mem_path[256] = {0};
 char ScallopState::g_reg_path[256] = {0};
@@ -20,44 +22,50 @@ int ScallopState::g_log_disas = 0;
 
 ScallopState scallopstate;
 
-namespace {
-std::atomic<bool> request_worker_running{false};
-std::thread request_worker;
+namespace
+{
+    std::atomic<bool> request_worker_running{false};
+    std::thread request_worker;
 
-/**
- * Check requests every 1 millisecond. Run once!!!!!!
- */
-void start_request_worker() {
-    bool expected = false;
-    if (!request_worker_running.compare_exchange_strong(expected, true)) {
-        return;
-    }
-    request_worker = std::thread([]() {
+    /**
+     * Check requests every 1 millisecond. Run once!!!!!!
+     */
+    void start_request_worker()
+    {
+        bool expected = false;
+        if (!request_worker_running.compare_exchange_strong(expected, true))
+        {
+            return;
+        }
+        request_worker = std::thread([]()
+                                     {
         while (request_worker_running.load(std::memory_order_relaxed)) {
             scallopstate.update();
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        }
-    });
-}
+        } });
+    }
 
-/**
- * Kill the thread handling requests.
- */
-void stop_request_worker() {
-    bool expected = true;
-    if (!request_worker_running.compare_exchange_strong(expected, false)) {
-        return;
+    /**
+     * Kill the thread handling requests.
+     */
+    void stop_request_worker()
+    {
+        bool expected = true;
+        if (!request_worker_running.compare_exchange_strong(expected, false))
+        {
+            return;
+        }
+        if (request_worker.joinable())
+        {
+            request_worker.join();
+        }
     }
-    if (request_worker.joinable()) {
-        request_worker.join();
-    }
-}
 } // namespace
 
 namespace
 {
     /**
-     * Normalizes all requests to be lowercase, no newlines or carriage returns, 
+     * Normalizes all requests to be lowercase, no newlines or carriage returns,
      * keeps whitespace to max one character, and leaves non ASCII bytes untouched.
      */
     std::string normalize_request(const std::string &input)
@@ -123,8 +131,8 @@ SCALLOP_REQUEST_TYPE scallop_request::getImportance()
 
 /**
  * It orders requests by importance: if you do one thing before the other, information may be wrong. For example,
- * if you step before you set memory or set a register, it won't set at the assumed time, 
- * making the program update the instruction AFTER it was supposed to. If you get mem or 
+ * if you step before you set memory or set a register, it won't set at the assumed time,
+ * making the program update the instruction AFTER it was supposed to. If you get mem or
  * get reg before you step, you won't have the updated memory and changes won't be made correctly.
  */
 scallop_request ScallopState::highestPriorityReq(bool allow_qemu_ops)
@@ -192,7 +200,7 @@ SCALLOP_REQUEST_TYPE ScallopState::classifyRequest(const std::string &request) c
 }
 
 /**
- * 
+ *
  */
 void ScallopState::enqueueRawRequest(const std::string &request)
 {
@@ -230,43 +238,73 @@ GateManager &ScallopState::getGates()
     return gates;
 }
 
+qemu_plugin_id_t ScallopState::getID()
+{
+    return id;
+}
+
+void ScallopState::setID(qemu_plugin_id_t id)
+{
+    this->id = id;
+}
+
 /**
  * This runs through the queue of requests that the front end made. It does it in order of
  * importance: if you do one thing before the other, information may be wrong. For example,
- * if you step before you set memory or set a register, it won't set at the assumed time, 
- * making the program update the instruction AFTER it was supposed to. If you get mem or 
+ * if you step before you set memory or set a register, it won't set at the assumed time,
+ * making the program update the instruction AFTER it was supposed to. If you get mem or
  * get reg before you step, you won't have the updated memory and changes won't be made correctly.
  */
-int ScallopState::update(bool allow_qemu_ops)
+int ScallopState::update(int vcpu)
 {
 
     scallop_request req("", SCALLOP_REQUEST_TYPE::defaultReq); // Default initialize
     while ((req = highestPriorityReq(false)).getImportance() != SCALLOP_REQUEST_TYPE::defaultReq)
     {
-        bool ok;
         switch (req.getImportance())
         {
         case SCALLOP_REQUEST_TYPE::getMem:
+        {
             uint64_t addr;
             int n;
             sscanf(req.getRequest().c_str(), "get memory 0x%llx %d", &addr, &n);
-            memDump(addr, n, &ok);
+
+            vcpu_op[vcpu].flags |= vcpu_operation_t::VCPU_OP_DUMP_MEM; // Set the flag
+
+            scallop_mem_arguments *memArgs = new scallop_mem_arguments; // Init args (callee must free!!!!)
+            memArgs->mem_addr = addr;
+            memArgs->mem_size = n;
+
+            vcpu_op[vcpu].arguments[vcpu_operation_t::VCPU_OP_DUMP_MEM] = memArgs; // Set the flags arguments to memArgs
             break;
+        }
         case SCALLOP_REQUEST_TYPE::getReg:
-            regDump(&ok);
+        {
+            vcpu_op[vcpu].flags |= vcpu_operation_t::VCPU_OP_DUMP_REGS;
             break;
+        }
         case SCALLOP_REQUEST_TYPE::setMem:
+        {
+            vcpu_op[vcpu].flags |= vcpu_operation_t::VCPU_OP_SET_MEM;
             break;
+        }
         case SCALLOP_REQUEST_TYPE::setReg:
+        {
+            vcpu_op[vcpu].flags |= vcpu_operation_t::VCPU_OP_SET_REGS;
             break;
+        }
         case SCALLOP_REQUEST_TYPE::step:
+        {
             int steps;
             sscanf(req.getRequest().c_str(), "step %d", &steps);
             scallopstate.getGates().stepIfNeeded(0, steps);
             break;
+        }
         case SCALLOP_REQUEST_TYPE::resume:
+        {
             scallopstate.getGates().resumeAll();
             break;
+        }
         }
     }
 
@@ -298,6 +336,8 @@ int qemu_plugin_install(qemu_plugin_id_t id, const qemu_info_t *info, int argc, 
     (void)info;
     const char *outfile = NULL;
 
+    scallopstate.setID(id);
+
     initDebug();
     debug("[install] pid=%ld\n", (long)getpid());
 
@@ -319,7 +359,6 @@ int qemu_plugin_install(qemu_plugin_id_t id, const qemu_info_t *info, int argc, 
     if (!*scallopstate.g_reg_path)
         snprintf(scallopstate.g_reg_path, sizeof(scallopstate.g_reg_path), "/tmp/regdump.txt");
 
-    
     scallopstate.g_out = fopen("/tmp/branchlog.csv", "w+");
     if (!scallopstate.g_out)
     {
@@ -328,7 +367,7 @@ int qemu_plugin_install(qemu_plugin_id_t id, const qemu_info_t *info, int argc, 
     }
 
     setvbuf(scallopstate.g_out, NULL, _IOLBF, 0);
-    
+
     // Probably shouldnt hardcode this but whatever
     scallopstate.g_log_disas = 1;
 
@@ -341,13 +380,14 @@ int qemu_plugin_install(qemu_plugin_id_t id, const qemu_info_t *info, int argc, 
     fflush(scallopstate.g_out);
 
     Dl_info soinfo{};
-     if (dladdr((void *)&qemu_plugin_install, &soinfo) && soinfo.dli_fname) {
-         fprintf(stderr, "[branchlog] using plugin %s\n", soinfo.dli_fname);
-         fflush(stderr);
-     }
-     
+    if (dladdr((void *)&qemu_plugin_install, &soinfo) && soinfo.dli_fname)
+    {
+        fprintf(stderr, "[branchlog] using plugin %s\n", soinfo.dli_fname);
+        fflush(stderr);
+    }
+
     scallopstate.getGates().initAll();
-    //scallopstate.getGates().resumeAll();
+    // scallopstate.getGates().resumeAll();
 
     auto control_socket = std::make_unique<ScallopSocket>(scallopstate);
     if (!control_socket->start())

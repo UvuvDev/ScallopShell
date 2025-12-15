@@ -1,4 +1,4 @@
 #pragma once
 #include "main.hpp"
 
-int regDump();
+void writeReg();

@@ -5,6 +5,8 @@
 #include <fstream>
 #include "main.hpp"
 #include "debug.hpp"
+#include "memorydump.hpp"
+#include "regdump.hpp"
 
 std::atomic<unsigned long> g_exec_ticks = 0;
 std::atomic<unsigned long> g_last_pc = 0;
@@ -102,9 +104,6 @@ static void log(unsigned int vcpu_index, void *udata)
         return;
     }
 
-    // Track current PC for accurate register dumps
-    scallopstate.current_pc_.store(ctx->pc, std::memory_order_relaxed);
-
     //debug("rip = 0x%" PRIx64 "\n", ctx->pc);
     int written = 0;
     if (scallopstate.g_log_disas) {
@@ -121,8 +120,11 @@ static void log(unsigned int vcpu_index, void *udata)
     {
         debug("fprintf failed for pc=0x%" PRIx64 ": %s\n", ctx->pc, strerror(errno));
     }
-    debug("pppp\n");
     fflush(scallopstate.g_out);
+
+    vcpu_current_thread_index = vcpu_index;
+    regDump();
+    memDump();
 
     scallopstate.update();
     scallopstate.getGates().waitIfNeeded(vcpu_index, ctx->pc);
