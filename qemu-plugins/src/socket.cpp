@@ -117,8 +117,11 @@ void ScallopSocket::handleClient(MinimalSocket::tcp::TcpConnectionBlocking conne
     buffer.reserve(kSocketChunk);
 
     try {
+
         while (running_) {
+
             std::string chunk = connection.receive(kSocketChunk, MinimalSocket::NULL_TIMEOUT);
+            
             if (chunk.empty()) {
                 break; // remote closed
             }
@@ -130,10 +133,13 @@ void ScallopSocket::handleClient(MinimalSocket::tcp::TcpConnectionBlocking conne
                 std::string line = buffer.substr(0, newline);
                 buffer.erase(0, newline + 1);
                 line = trim_line(std::move(line));
+
+
                 if (line.empty()) {
                     continue;
                 }
                 state_.enqueueRawRequest(line);
+                
                 try {
                     connection.send("ok\n");
                 } catch (const std::exception &ex) {

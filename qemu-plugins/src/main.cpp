@@ -172,6 +172,8 @@ SCALLOP_REQUEST_TYPE ScallopState::classifyRequest(const std::string &request) c
         return normalized.rfind(prefix, 0) == 0;
     };
 
+    debug("%s", normalized);
+
     if (starts_with("get memory") || starts_with("memdump"))
     {
         return SCALLOP_REQUEST_TYPE::getMem;
@@ -257,7 +259,7 @@ void ScallopState::setID(qemu_plugin_id_t id)
  */
 int ScallopState::update(int vcpu)
 {
-
+    //debug("at head of update\n");
     scallop_request req("", SCALLOP_REQUEST_TYPE::defaultReq); // Default initialize
     while ((req = highestPriorityReq(false)).getImportance() != SCALLOP_REQUEST_TYPE::defaultReq)
     {
@@ -265,7 +267,7 @@ int ScallopState::update(int vcpu)
         {
         case SCALLOP_REQUEST_TYPE::getMem:
         {
-            uint64_t addr;
+            /*uint64_t addr;
             int n;
             sscanf(req.getRequest().c_str(), "get memory 0x%llx %d", &addr, &n);
 
@@ -280,22 +282,24 @@ int ScallopState::update(int vcpu)
             memArgs->mem_addr = addr;
             memArgs->mem_size = n;
 
-            vcpu_op[vcpu].arguments[vcpu_operation_t::VCPU_OP_DUMP_MEM] = memArgs; // Set the flags arguments to memArgs
+            vcpu_op[vcpu].arguments[vcpu_operation_t::VCPU_OP_DUMP_MEM] = memArgs; // Set the flags arguments to memArgs*/
             break;
         }
         case SCALLOP_REQUEST_TYPE::getReg:
         {
-            vcpu_op[vcpu].flags |= vcpu_operation_t::VCPU_OP_DUMP_REGS;
+            debug("going to set the flags for \"get reg\"\n");
+            vcpu_op[vcpu].flags.store(vcpu_op[vcpu].flags.load(std::memory_order_relaxed) | vcpu_operation_t::VCPU_OP_DUMP_REGS, std::memory_order_relaxed);
+            debug("set the flags for \"get reg\"\n");
             break;
         }
         case SCALLOP_REQUEST_TYPE::setMem:
         {
-            vcpu_op[vcpu].flags |= vcpu_operation_t::VCPU_OP_SET_MEM;
+            //vcpu_op[vcpu].flags |= vcpu_operation_t::VCPU_OP_SET_MEM;
             break;
         }
         case SCALLOP_REQUEST_TYPE::setReg:
         {
-            vcpu_op[vcpu].flags |= vcpu_operation_t::VCPU_OP_SET_REGS;
+            //vcpu_op[vcpu].flags |= vcpu_operation_t::VCPU_OP_SET_REGS;
             break;
         }
         case SCALLOP_REQUEST_TYPE::step:
@@ -312,6 +316,7 @@ int ScallopState::update(int vcpu)
         }
         }
     }
+    //debug("ended update\n");
 
     return 0;
 }
