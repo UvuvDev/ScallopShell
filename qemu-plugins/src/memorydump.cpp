@@ -69,13 +69,13 @@ int memDump() {
 
     
     // If the command isn't set to Dump Mem, exit. 
-    if ( scallopstate.vcpu_op[vcpu_current_thread_index].flags.load(std::memory_order_relaxed) != VCPU_OP_DUMP_MEM) {
+    if ( scallopstate.vcpu_op[vcpu_current_thread_index].flags.load(std::memory_order_relaxed) & VCPU_OP_DUMP_MEM != VCPU_OP_DUMP_MEM) {
         debug("Memory dump not queued. \n");
         return -1;
     }
 
     // Zero the flag so the request isn't requeued.
-    scallopstate.vcpu_op[vcpu_current_thread_index].flags.store(scallopstate.vcpu_op[vcpu_current_thread_index].flags.load(std::memory_order_relaxed) & ~vcpu_operation_t::VCPU_OP_DUMP_REGS, std::memory_order_relaxed); // Set the flag
+    scallopstate.vcpu_op[vcpu_current_thread_index].flags.store(scallopstate.vcpu_op[vcpu_current_thread_index].flags.load(std::memory_order_relaxed) & ~vcpu_operation_t::VCPU_OP_DUMP_MEM, std::memory_order_relaxed); // Set the flag
 
     
     // Load the address, size N, etc. 

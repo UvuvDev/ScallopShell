@@ -429,7 +429,7 @@ int qemu_plugin_install(qemu_plugin_id_t id, const qemu_info_t *info, int argc, 
         fprintf(stderr, "[branchlog] control socket listening on port %u\n",
                 static_cast<unsigned>(control_socket->port()));
         scallopstate.attachSocket(std::move(control_socket));
-        //start_request_worker();
+        start_request_worker();
     }
 
     // qemu_plugin_register_vcpu_init_cb(id, vcpu_init_cb);
