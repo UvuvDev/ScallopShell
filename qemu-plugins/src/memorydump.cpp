@@ -69,7 +69,7 @@ int memDump() {
 
     
     // If the command isn't set to Dump Mem, exit. 
-    if ( scallopstate.vcpu_op[vcpu_current_thread_index].flags.load(std::memory_order_relaxed) & VCPU_OP_DUMP_MEM != VCPU_OP_DUMP_MEM) {
+    if ( (scallopstate.vcpu_op[vcpu_current_thread_index].flags.load(std::memory_order_relaxed) & VCPU_OP_DUMP_MEM) != VCPU_OP_DUMP_MEM) {
         debug("Memory dump not queued. \n");
         return -1;
     }

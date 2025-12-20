@@ -5,8 +5,8 @@ int regDump()
 {
     debug("STARTED REGDUMP\n");
     // Reg Dump flag is not set, return
-    if (scallopstate.vcpu_op[vcpu_current_thread_index].flags.load(std::memory_order_relaxed) 
-        & VCPU_OP_DUMP_REGS != VCPU_OP_DUMP_REGS) {
+    if ((scallopstate.vcpu_op[vcpu_current_thread_index].flags.load(std::memory_order_relaxed) 
+        & VCPU_OP_DUMP_REGS) != VCPU_OP_DUMP_REGS) {
             debug("not requested");
         return -1;
     }
