@@ -8,7 +8,11 @@ int regDump()
         return -1;
     }
 
+    scallopstate.vcpu_op[vcpu_current_thread_index].flags.store(scallopstate.vcpu_op[vcpu_current_thread_index].flags.load(std::memory_order_relaxed) & ~vcpu_operation_t::VCPU_OP_DUMP_REGS, std::memory_order_relaxed);
+            
+
     GArray *regs = qemu_plugin_get_registers();
+    
     if (regs)
     {
         

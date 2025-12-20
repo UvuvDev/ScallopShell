@@ -72,7 +72,8 @@ static int parse_imm_target(const char *d, uint64_t *out_target)
         return 0;
     const char *p = strstr(d, "0x");
     if (!p)
-        return 0;
+        
+    return 0;
     uint64_t v = 0;
     if (sscanf(p, "%lx", &v) == 1)
     {
@@ -98,6 +99,7 @@ struct exec_ctx
  */
 static void log(unsigned int vcpu_index, void *udata)
 {
+    debug("\n\nHEAD OF LOG\n");
     auto *ctx = static_cast<exec_ctx *>(udata);
     if (!ctx || !scallopstate.g_out)
     {
@@ -123,12 +125,19 @@ static void log(unsigned int vcpu_index, void *udata)
     fflush(scallopstate.g_out);
 
     vcpu_current_thread_index = vcpu_index;
+    debug("dumping reg...\n");
     regDump();
-    //memDump();
+    debug("dumped reg!\n");
+    debug("dumping mem...\n");
+    memDump();
+    debug("dumped mem!\n");
 
     scallopstate.update();
     scallopstate.getGates().waitIfNeeded(vcpu_index, ctx->pc);
+    debug("is this the nightmare?\n");
     scallopstate.update();
+
+    debug("TAIL OF LOG\n\n");
 }
 
 /**

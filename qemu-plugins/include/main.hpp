@@ -43,12 +43,12 @@ enum class SCALLOP_REQUEST_TYPE {
 /**
  * Enum with commands.
  */
-typedef enum {
+typedef enum : uint64_t {
     VCPU_OP_DUMP_REGS  = 1 << 1,
     VCPU_OP_SET_REGS   = 1 << 2,
-    VCPU_OP_DUMP_MEM   = 1 << 1,
-    VCPU_OP_SET_MEM    = 1 << 2,
-    VCPU_OP_BREAKPOINT = 1 << 3,
+    VCPU_OP_DUMP_MEM   = 1 << 3,
+    VCPU_OP_SET_MEM    = 1 << 4,
+    VCPU_OP_BREAKPOINT = 1 << 5,
 } vcpu_operation_t;
 
 

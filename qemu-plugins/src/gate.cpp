@@ -1,4 +1,5 @@
 #include "gate.hpp"
+#include "debug.hpp"
 
 #include <algorithm>
 
@@ -61,20 +62,29 @@ void GateManager::stepIfNeeded(unsigned vcpu, uint64_t steps) {
 }
 
 void GateManager::waitIfNeeded(unsigned vcpu, uint64_t pc) {
+
+    debug("\n\n\nWAITING AT GATE!!!\n");
+
     gate_t &gate = gateFor(vcpu);
 
     if (gate.running.load(std::memory_order_relaxed)) {
+        debug("Gate running: EXITING\n\n\n");
         return;
     }
 
     auto lo = filter_lo_.load(std::memory_order_relaxed);
     auto hi = filter_hi_.load(std::memory_order_relaxed);
     if (pc < lo || pc > hi) {
+        debug("outside of filter range: EXITING\n\n\n");
         return;
     }
 
+    debug("thread mutex locking... ");
     pthread_mutex_lock(&gate.mu);
+    debug("thread mutex locked.\n ");
+
     for (;;) {
+        debug("tick +1  ");
         if (gate.running.load(std::memory_order_relaxed)) {
             break;
         }
@@ -85,7 +95,9 @@ void GateManager::waitIfNeeded(unsigned vcpu, uint64_t pc) {
         }
         pthread_cond_wait(&gate.cv, &gate.mu);
     }
+    debug("unlocking mutex...\n");
     pthread_mutex_unlock(&gate.mu);
+    debug("EXITING GATE!!!\n\n\n");
 }
 
 void GateManager::inRange(uint64_t lowAddr, uint64_t highAddr) {

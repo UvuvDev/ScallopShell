@@ -1,5 +1,6 @@
 #include "memorydump.hpp"
 #include "debug.hpp"
+#include <bit>
 
 /**
  * Print out a hexdump of bytes size N. Space between every byte, every 8 bytes gets a newline.
@@ -66,11 +67,25 @@ int memDump() {
     debug("vcpu index = %d: ", vcpu_current_thread_index );
     debug("flags = %llx\n", scallopstate.vcpu_op[vcpu_current_thread_index].flags.load(std::memory_order_relaxed));
 
+    
+    // If the command isn't set to Dump Mem, exit. 
     if ( scallopstate.vcpu_op[vcpu_current_thread_index].flags.load(std::memory_order_relaxed) != VCPU_OP_DUMP_MEM) {
+        debug("Memory dump not queued. \n");
         return -1;
     }
-    // I'm sorry for how this looks. I tried my best ):
-    scallop_mem_arguments* memDumpArgs = (scallop_mem_arguments*)scallopstate.vcpu_op[vcpu_current_thread_index].arguments[VCPU_OP_DUMP_MEM].load(std::memory_order_relaxed);
+
+    // Zero the flag so the request isn't requeued.
+    scallopstate.vcpu_op[vcpu_current_thread_index].flags.store(scallopstate.vcpu_op[vcpu_current_thread_index].flags.load(std::memory_order_relaxed) & ~vcpu_operation_t::VCPU_OP_DUMP_REGS, std::memory_order_relaxed); // Set the flag
+
+    
+    // Load the address, size N, etc. 
+    scallop_mem_arguments* memDumpArgs = (scallop_mem_arguments*)scallopstate.vcpu_op[vcpu_current_thread_index]
+        .arguments[std::countr_zero(static_cast<uint64_t>(VCPU_OP_DUMP_MEM))].load(std::memory_order_relaxed);
+
+    if (memDumpArgs == 0) {
+        debug("Couldn't get memdump arguments, exiting.\n");
+        return 1;
+    }
 
     debug("addr = %llx\n", memDumpArgs->mem_addr);
     debug("N = %d\n", memDumpArgs->mem_size);
@@ -81,7 +96,7 @@ int memDump() {
 
     debug("arguments set\n");
 
-    // Verify validity
+    // Verify address and size are not null
     if (address == 0)  {
         
         return 1;

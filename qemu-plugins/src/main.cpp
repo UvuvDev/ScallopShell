@@ -172,7 +172,7 @@ SCALLOP_REQUEST_TYPE ScallopState::classifyRequest(const std::string &request) c
         return normalized.rfind(prefix, 0) == 0;
     };
 
-    debug("%s", normalized);
+    debug("req = %s\n", normalized.c_str());
 
     if (starts_with("get memory") || starts_with("memdump"))
     {
@@ -267,29 +267,46 @@ int ScallopState::update(int vcpu)
         {
         case SCALLOP_REQUEST_TYPE::getMem:
         {
-            /*uint64_t addr;
+            uint64_t addr;
             int n;
-            sscanf(req.getRequest().c_str(), "get memory 0x%llx %d", &addr, &n);
-
-            vcpu_op[vcpu].flags |= vcpu_operation_t::VCPU_OP_DUMP_MEM; // Set the flag
-
-            scallop_mem_arguments* memArgs;
             
-            if (vcpu_op[vcpu].arguments[vcpu_operation_t::VCPU_OP_DUMP_MEM] == 0) {
+            debug("Queueing the memory!\n");
+
+            sscanf(req.getRequest().c_str(), "get memory 0x%llx %d", &addr, &n);
+            
+            debug("addr = %llx      n = %d\n", addr, n);
+
+            vcpu_op[vcpu].flags.store(vcpu_op[vcpu].flags.load(std::memory_order_relaxed) | vcpu_operation_t::VCPU_OP_DUMP_MEM, std::memory_order_relaxed); // Set the flag
+
+            debug("stored the flag.\n");
+
+            uint64_t flagIndex = std::countr_zero(static_cast<uint64_t>(VCPU_OP_DUMP_MEM));
+            scallop_mem_arguments* memArgs = (scallop_mem_arguments*)vcpu_op[vcpu].arguments[flagIndex].load(std::memory_order_relaxed);
+            
+            debug("checking if the arguments are initiliazed\n");
+            if (memArgs == nullptr) {
+                debug("alloc new arguments\n");
                 memArgs = new scallop_mem_arguments;
+
+                if (memArgs == nullptr) {
+                    debug("      alloc fail!!!\n");
+                }
             }
-            // Init args (callee must free!!!!)
+            
+            debug("init args\n");
+            // Init args 
             memArgs->mem_addr = addr;
             memArgs->mem_size = n;
 
-            vcpu_op[vcpu].arguments[vcpu_operation_t::VCPU_OP_DUMP_MEM] = memArgs; // Set the flags arguments to memArgs*/
+            debug("setting args\n");
+            vcpu_op[vcpu].arguments[std::countr_zero(static_cast<uint64_t>(VCPU_OP_DUMP_MEM))] = memArgs; // Set the flags arguments to memArgs
+            debug("done!!!\n");
             break;
+
         }
         case SCALLOP_REQUEST_TYPE::getReg:
         {
-            debug("going to set the flags for \"get reg\"\n");
             vcpu_op[vcpu].flags.store(vcpu_op[vcpu].flags.load(std::memory_order_relaxed) | vcpu_operation_t::VCPU_OP_DUMP_REGS, std::memory_order_relaxed);
-            debug("set the flags for \"get reg\"\n");
             break;
         }
         case SCALLOP_REQUEST_TYPE::setMem:
@@ -412,7 +429,7 @@ int qemu_plugin_install(qemu_plugin_id_t id, const qemu_info_t *info, int argc, 
         fprintf(stderr, "[branchlog] control socket listening on port %u\n",
                 static_cast<unsigned>(control_socket->port()));
         scallopstate.attachSocket(std::move(control_socket));
-        start_request_worker();
+        //start_request_worker();
     }
 
     // qemu_plugin_register_vcpu_init_cb(id, vcpu_init_cb);
