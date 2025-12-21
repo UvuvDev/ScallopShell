@@ -172,7 +172,7 @@ SCALLOP_REQUEST_TYPE ScallopState::classifyRequest(const std::string &request) c
         return normalized.rfind(prefix, 0) == 0;
     };
 
-    debug("req = %s\n", normalized.c_str());
+    //debug("req = %s\n", normalized.c_str());
 
     if (starts_with("get memory") || starts_with("memdump"))
     {

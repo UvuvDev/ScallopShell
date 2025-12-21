@@ -372,12 +372,27 @@ std::vector<uint8_t> *Emulator::getMemory(uint64_t address, int n, bool _update,
 
     OUT_TO_FILE(cmd);
 
+
+    static uint64_t lastAddress = cache.address;
+
+    
+    char TEST_SET[128];
+    std::snprintf(TEST_SET, sizeof(TEST_SET), "set memory 0x%llx %d\n",
+                  (unsigned long long)cache.address, n);
+
+    if (socket.sendCommand(TEST_SET).compare(0, 2, "ok") != 0)
+    {
+        cache.tryUpdateAgain = true;
+        return &cache.data;
+    }
+
     if (socket.sendCommand(cmd).compare(0, 2, "ok") != 0)
     {
         cache.tryUpdateAgain = true;
         return &cache.data;
     }
 
+    if (lastAddress != cache.address) lastAddress = cache.address;
 
     OUT_TO_FILE("sent command!\n");
 

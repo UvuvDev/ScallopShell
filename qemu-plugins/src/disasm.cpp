@@ -126,11 +126,12 @@ static void log(unsigned int vcpu_index, void *udata)
     fflush(scallopstate.g_out);
 
     vcpu_current_thread_index = vcpu_index;
-    debug("setting mem... \n");
-    setMem();
-    debug("set mem. \n");
-    regDump();
-    memDump();
+    if (setMem())  debug("failed set mem. \n");
+    else debug("> set mem\n");
+    if (regDump()) debug("failed regdump.\n");
+    else debug("> dumped reg\n");
+    if (memDump()) debug("failed memdump.\n");
+    else debug("> dumped memory\n");
     
     scallopstate.update();
     scallopstate.getGates().waitIfNeeded(vcpu_index, ctx->pc);
