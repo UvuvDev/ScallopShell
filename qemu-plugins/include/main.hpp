@@ -123,7 +123,59 @@ public:
     const ScallopSocket *socket() const;
 
     void enqueueRawRequest(const std::string &request);
+
     int update(int vcpu = 0);
+
+    template<typename T>
+    int setFlagAndInitArguments(int vcpu, vcpu_operation_t cmd, T** args) {
+        // Set the flag to be the cmd
+        vcpu_op[vcpu].flags.store(vcpu_op[vcpu].flags.load(std::memory_order_relaxed) | cmd, std::memory_order_relaxed); 
+
+        // Get how many shifts the flag was at ( 0b01000 would = 3 )
+        uint64_t flagIndex = std::countr_zero(static_cast<uint64_t>(cmd));
+
+        if (args == nullptr) {
+            return 0;
+        }
+        
+        // Get the previous arguments to check if they are initialized
+        T* newArgs = (T*)vcpu_op[vcpu].arguments[flagIndex].load(std::memory_order_relaxed);        
+
+        // If memArgs hasn't been initialized yet
+        if (newArgs == nullptr) {
+            newArgs = new T;
+
+            if (newArgs == nullptr) {
+                return -1; // Failed allocation, so leave
+            }
+        
+        }
+
+        *args = newArgs;
+
+        return 0;
+    }
+
+    int setArguments(int vcpu, vcpu_operation_t cmd, void* args);
+
+    template<typename T>
+    int getArguments(int vcpu, vcpu_operation_t cmd, T** args) {
+        
+        T* retArgs = (T*)vcpu_op[vcpu]
+            .arguments[std::countr_zero(static_cast<uint64_t>(cmd))].load(std::memory_order_relaxed);
+
+        if (retArgs == nullptr) {
+            return -1;
+        }
+
+        *args = retArgs;
+        return 0;
+        
+    }
+
+    int removeFlag(int vcpu, vcpu_operation_t cmd);
+
+    bool getIsFlagQueued(int vcpu, vcpu_operation_t cmd);
 
     GateManager& getGates();
 

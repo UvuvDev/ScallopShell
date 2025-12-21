@@ -5,18 +5,16 @@ int regDump()
 {
     debug("STARTED REGDUMP\n");
     // Reg Dump flag is not set, return
-    if ((scallopstate.vcpu_op[vcpu_current_thread_index].flags.load(std::memory_order_relaxed) 
-        & VCPU_OP_DUMP_REGS) != VCPU_OP_DUMP_REGS) {
-            debug("not requested");
+    if (scallopstate.getIsFlagQueued(vcpu_current_thread_index, VCPU_OP_DUMP_REGS)) {
+            //debug("not requested");
         return -1;
     }
 
     // Clear the get register flag
-    scallopstate.vcpu_op[vcpu_current_thread_index].flags.store(scallopstate.vcpu_op[vcpu_current_thread_index].flags.load(std::memory_order_relaxed) & ~vcpu_operation_t::VCPU_OP_DUMP_REGS, std::memory_order_relaxed);
-            
+    scallopstate.removeFlag(vcpu_current_thread_index, VCPU_OP_DUMP_REGS);
+
     GArray *regs = qemu_plugin_get_registers();
     
-    debug("getting registers... ");
     if (regs)
     {
         debug("got registers\n");

@@ -69,32 +69,24 @@ int memDump() {
 
     
     // If the command isn't set to Dump Mem, exit. 
-    if ( (scallopstate.vcpu_op[vcpu_current_thread_index].flags.load(std::memory_order_relaxed) & VCPU_OP_DUMP_MEM) != VCPU_OP_DUMP_MEM) {
-        debug("Memory dump not queued. \n");
+    if ( scallopstate.getIsFlagQueued(vcpu_current_thread_index, VCPU_OP_DUMP_MEM)) {
         return -1;
     }
 
     // Zero the flag so the request isn't requeued.
-    scallopstate.vcpu_op[vcpu_current_thread_index].flags.store(scallopstate.vcpu_op[vcpu_current_thread_index].flags.load(std::memory_order_relaxed) & ~vcpu_operation_t::VCPU_OP_DUMP_MEM, std::memory_order_relaxed); // Set the flag
-
+    scallopstate.removeFlag(vcpu_current_thread_index, VCPU_OP_DUMP_MEM);
     
     // Load the address, size N, etc. 
-    scallop_mem_arguments* memDumpArgs = (scallop_mem_arguments*)scallopstate.vcpu_op[vcpu_current_thread_index]
-        .arguments[std::countr_zero(static_cast<uint64_t>(VCPU_OP_DUMP_MEM))].load(std::memory_order_relaxed);
+    scallop_mem_arguments* memDumpArgs;
 
-    if (memDumpArgs == 0) {
-        debug("Couldn't get memdump arguments, exiting.\n");
-        return 1;
+    // If arguments fail to load, exit
+    if (scallopstate.getArguments<scallop_mem_arguments>(vcpu_current_thread_index, VCPU_OP_DUMP_MEM, &memDumpArgs)) {
+        return 1;        
     }
-
-    debug("addr = %llx\n", memDumpArgs->mem_addr);
-    debug("N = %d\n", memDumpArgs->mem_size);
 
     uint64_t address = memDumpArgs->mem_addr;
     int n = memDumpArgs->mem_size;
 
-
-    debug("arguments set\n");
 
     // Verify address and size are not null
     if (address == 0)  {
@@ -116,7 +108,6 @@ int memDump() {
     // Set the size
     g_byte_array_set_size(buf, n);
 
-    debug("memory request!!!\n");
     
     // Read the memory
     bool read_ok = qemu_plugin_read_memory_vaddr(address, buf, n);

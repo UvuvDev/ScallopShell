@@ -134,7 +134,6 @@ static void log(unsigned int vcpu_index, void *udata)
 
     scallopstate.update();
     scallopstate.getGates().waitIfNeeded(vcpu_index, ctx->pc);
-    debug("is this the nightmare?\n");
     scallopstate.update();
 
     debug("TAIL OF LOG\n\n");
