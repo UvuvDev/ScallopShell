@@ -7,6 +7,7 @@
 #include "debug.hpp"
 #include "memorydump.hpp"
 #include "regdump.hpp"
+#include "setmem.hpp"
 
 std::atomic<unsigned long> g_exec_ticks = 0;
 std::atomic<unsigned long> g_last_pc = 0;
@@ -125,13 +126,12 @@ static void log(unsigned int vcpu_index, void *udata)
     fflush(scallopstate.g_out);
 
     vcpu_current_thread_index = vcpu_index;
-    debug("dumping reg...\n");
+    debug("setting mem... \n");
+    setMem();
+    debug("set mem. \n");
     regDump();
-    debug("dumped reg!\n");
-    debug("dumping mem...\n");
     memDump();
-    debug("dumped mem!\n");
-
+    
     scallopstate.update();
     scallopstate.getGates().waitIfNeeded(vcpu_index, ctx->pc);
     scallopstate.update();

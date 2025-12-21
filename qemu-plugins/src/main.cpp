@@ -277,7 +277,7 @@ int ScallopState::update(int vcpu)
 
             // If setting the flags and arguments doesn't succeed, continue
             if (setFlagAndInitArguments<scallop_mem_arguments>(vcpu, VCPU_OP_DUMP_MEM, &memArgs)) {
-                debug("fail");
+                //debug("fail");
                 break;
             }
             
@@ -299,7 +299,28 @@ int ScallopState::update(int vcpu)
         }
         case SCALLOP_REQUEST_TYPE::setMem:
         {
-            //vcpu_op[vcpu].flags |= vcpu_operation_t::VCPU_OP_SET_MEM;
+            uint64_t addr;
+            int n;
+    
+            // Read the request arguments from the req
+            sscanf(req.getRequest().c_str(), "set memory 0x%llx %d", &addr, &n);
+            
+            scallop_mem_arguments* memArgs;
+
+            // If setting the flags and arguments doesn't succeed, continue
+            if (setFlagAndInitArguments<scallop_mem_arguments>(vcpu, VCPU_OP_SET_MEM, &memArgs)) {
+                //debug("fail");
+                break;
+            }
+            
+            // Define args 
+            memArgs->mem_addr = addr;
+            memArgs->mem_size = n;
+
+
+            // Set the flags arguments to memArgs
+            setArguments(vcpu, VCPU_OP_SET_MEM, memArgs);
+            
             break;
         }
         case SCALLOP_REQUEST_TYPE::setReg:
@@ -321,7 +342,6 @@ int ScallopState::update(int vcpu)
         }
         }
     }
-    //debug("ended update\n");
 
     return 0;
 }

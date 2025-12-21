@@ -3,7 +3,7 @@
 
 int regDump()
 {
-    debug("STARTED REGDUMP\n");
+    //debug("STARTED REGDUMP\n");
     // Reg Dump flag is not set, return
     if (scallopstate.getIsFlagQueued(vcpu_current_thread_index, VCPU_OP_DUMP_REGS)) {
             //debug("not requested");
@@ -17,7 +17,7 @@ int regDump()
     
     if (regs)
     {
-        debug("got registers\n");
+        //debug("got registers\n");
         
         const char *path = *scallopstate.g_reg_path ? scallopstate.g_reg_path : "/tmp/branchregs.txt";
         FILE *f = fopen(path, "w");

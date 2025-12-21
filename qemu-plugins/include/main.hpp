@@ -68,13 +68,15 @@ struct vcpu_pending_ops {
     }
 };
 
-typedef struct {
+struct scallop_mem_arguments{
 
+    static constexpr int byteLength = 8;
+    static constexpr int numberOfRows = 512;
     uint64_t mem_addr;
     int mem_size;
-    uint8_t mem_data[4096];
+    uint8_t mem_data[byteLength*numberOfRows];
 
-} scallop_mem_arguments;
+} ;
 
 /**
  * Requests
@@ -137,7 +139,7 @@ public:
         if (args == nullptr) {
             return 0;
         }
-        
+
         // Get the previous arguments to check if they are initialized
         T* newArgs = (T*)vcpu_op[vcpu].arguments[flagIndex].load(std::memory_order_relaxed);        
 
