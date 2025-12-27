@@ -62,7 +62,7 @@ static bool try_chunked_memread(uint64_t base, size_t len, GByteArray *buf)
  */
 int memDump() {
 
-    //debug("memdump started\n");
+    debug("memdump started\n");
 
     //debug("vcpu index = %d: ", vcpu_current_thread_index );
     //debug("flags = %llx\n", scallopstate.vcpu_op[vcpu_current_thread_index].flags.load(std::memory_order_relaxed));
@@ -70,6 +70,7 @@ int memDump() {
     
     // If the command isn't set to Dump Mem, exit. 
     if ( scallopstate.getIsFlagQueued(vcpu_current_thread_index, VCPU_OP_DUMP_MEM)) {
+        debug("memdump not queued\n");
         return -1;
     }
 
@@ -87,7 +88,7 @@ int memDump() {
     uint64_t address = memDumpArgs->mem_addr;
     int n = memDumpArgs->mem_size;
 
-
+    debug("verifying args...");
     // Verify address and size are not null
     if (address == 0)  {
         
@@ -98,6 +99,7 @@ int memDump() {
         return 1;
     }
 
+    debug("verified. \n");
     // Make a GByteArray
     GByteArray *buf = g_byte_array_sized_new(n);
     if (!buf)  {// If failed to init, return fail
@@ -113,8 +115,8 @@ int memDump() {
     bool read_ok = qemu_plugin_read_memory_vaddr(address, buf, n);
     if (!read_ok)
     {
-        //debug("[mem] direct read 0x%016" PRIx64 " +0x%zx failed, retrying in chunks\n",
-        //    address, n);
+        debug("[mem] direct read 0x%016" PRIx64 " +0x%zx failed, retrying in chunks\n",
+            address, n);
         read_ok = try_chunked_memread(address, n, buf);
     }
 
@@ -128,20 +130,23 @@ int memDump() {
         {
             write_hex_dump(f, buf->data, buf->len);
             fclose(f);
-            //debug("[mem] wrote %zu bytes from 0x%016" PRIx64 " to %s\n",
-            //   buf->len, address, path);
+            debug("[mem] wrote %zu bytes from 0x%016" PRIx64 " to %s\n",
+               buf->len, address, path);
+        }
+        else {
+            debug("it didnt open for some reason???\n");
         }
     }
     else
     {
-        //debug("[mem] unable to read memory at 0x%016" PRIx64 " len=0x%zx\n",
-        //    address, n);
+        debug("[mem] unable to read memory at 0x%016" PRIx64 " len=0x%zx\n",
+            address, n);
     }
     g_byte_array_free(buf, TRUE);
     
 
 
-    //debug("ret from memdump\n");
+    debug("ret from memdump\n");
 
     return 0;
 

@@ -9,6 +9,7 @@
 #include "regdump.hpp"
 #include "setmem.hpp"
 
+uint64_t cur_pc = 0;
 std::atomic<unsigned long> g_exec_ticks = 0;
 std::atomic<unsigned long> g_last_pc = 0;
 
@@ -124,6 +125,8 @@ static void log(unsigned int vcpu_index, void *udata)
         debug("fprintf failed for pc=0x%" PRIx64 ": %s\n", ctx->pc, strerror(errno));
     }
     fflush(scallopstate.g_out);
+
+    cur_pc = ctx->pc;
 
     vcpu_current_thread_index = vcpu_index;
     if (setMem())  debug("failed set mem. \n");

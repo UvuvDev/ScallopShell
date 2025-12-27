@@ -6,7 +6,21 @@
 #include "memory"
 #include "string"
 #include "functional"
+#include "atomic"
 #include "socket.hpp"
+
+/**
+ * Enum with commands.
+ */
+typedef enum : uint64_t {
+    VCPU_OP_DUMP_REGS  = 1 << 1,
+    VCPU_OP_SET_REGS   = 1 << 2,
+    VCPU_OP_DUMP_MEM   = 1 << 3,
+    VCPU_OP_SET_MEM    = 1 << 4,
+    VCPU_OP_BREAKPOINT = 1 << 5,
+} vcpu_operation_t;
+
+static constexpr int MAX_VCPUS = 8;
 
 enum class _EmulType {
     QEMU = 1,
@@ -51,8 +65,15 @@ private:
 
     static PluginNetwork socket;
 
+    static std::atomic_uint64_t flags[MAX_VCPUS];
+
 public:
 
+    static int setFlag(int vcpu, vcpu_operation_t cmd);
+
+    static int removeFlag(int vcpu, vcpu_operation_t cmd);
+
+    static bool getIsFlagQueued(int vcpu, vcpu_operation_t cmd);
     /**
      * Start emulating. Currently, QEMU is the only compatible emulator.
      */
@@ -65,18 +86,30 @@ public:
      */
     static int modifyMemory(uint64_t address, uint8_t* data, int n);
 
+    /**
+     * Modify the memory from the address given until the address + n. 
+     */
+    static int modifyMemory(uint64_t address, std::vector<uint8_t>* data, int n);
+
+    /**
+     * Stage edits so they can be flushed the next time execution advances.
+     */
+    static void stageMemoryWrite(uint64_t address, const std::vector<uint8_t>& data, int n);
+    static bool hasStagedMemoryWrite();
+    static int flushStagedMemoryWrite();
+
     static int focusMemory(uint64_t lowAddress, uint64_t highAddress);
 
     /**
      * Retrieve memory from an address
      */
-    static std::vector<uint8_t>* getMemory(uint64_t address, int n, bool update = false,
+    static std::vector<uint8_t>* getMemory(uint64_t address, int n,
                                            int targetMods = 1, const std::string& cacheKey = std::string());
 
     /**
      * Get the registers
      */
-    static std::vector<std::string>* getRegisters(bool update = false);
+    static std::vector<std::string>* getRegisters();
 
     /**
      * Set the value of a register

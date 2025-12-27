@@ -5,7 +5,7 @@ int setMem() {
     
     // If the command isn't set to Dump Mem, exit. 
     if (scallopstate.getIsFlagQueued(vcpu_current_thread_index, VCPU_OP_SET_MEM)) {
-        //return -1;
+        return -1;
     }
 
     // Zero the flag so the request isn't requeued.

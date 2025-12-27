@@ -27,6 +27,8 @@ extern "C" {
 #include "functional"
 #include <memory> 
 
+extern uint64_t cur_pc;
+
 /**
  * This is the request type. We can handle requests in order of importance.
  */
@@ -34,10 +36,10 @@ enum class SCALLOP_REQUEST_TYPE {
     defaultReq,
     getMem,
     getReg,
-    setMem,
-    setReg,
     step,
     resume,
+    setMem,
+    setReg,
 };
 
 /**

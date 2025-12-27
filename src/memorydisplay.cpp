@@ -2,15 +2,14 @@
 #include "emulatorAPI.hpp"
 #include <ftxui/component/component.hpp>
 #include <utility>
+#include "debug.hpp"
 
 using namespace ftxui;
 
-
-
 uint64_t getRegisterValue(const std::string& registerArg) {
-    std::vector<std::string>* regs = Emulator::getRegisters(false);
+    std::vector<std::string>* regs = Emulator::getRegisters();
     if (!regs || regs->empty()) {
-        regs = Emulator::getRegisters(true);
+        regs = Emulator::getRegisters();
         if (!regs)
             return 0;
     }
@@ -81,10 +80,12 @@ namespace ScallopUI
                 uint8_t old = data_->at(idx);
                 data_->at(idx) = (uint8_t)((v << 4) | (old & 0x0F));
                 pending_nibble_ = v; // waiting for low nibble
+                markMemoryDirty();
             } else {
                 // --- Second nibble (low) ---
                 data_->at(idx) = (uint8_t)((pending_nibble_ << 4) | v);
                 pending_nibble_ = -1;
+                markMemoryDirty();
 
                 // advance selection to next cell
                 if (++selectedColumn >= bpr_) {
@@ -96,6 +97,13 @@ namespace ScallopUI
                     editing_ = false;
                 }
             }
+        }
+
+        void markMemoryDirty() {
+            if (!data_ || data_->empty())
+                return;
+            const size_t span = std::min(size_, data_->size());
+            Emulator::stageMemoryWrite(base_addr_, *data_, static_cast<int>(span));
         }
 
 
@@ -153,6 +161,7 @@ namespace ScallopUI
             std::string followedReg_;
             std::string cache_key_;
             bool need_refresh_ = true;
+            int current_vcpu = 0;
 
             bool Focusable() const override { return true; }
 
@@ -189,6 +198,7 @@ namespace ScallopUI
                         if (!editTrail.empty()) {
                             editTrail.pop_back();
                         }
+                        markMemoryDirty();
                         return true;
                     }
 
@@ -252,6 +262,7 @@ namespace ScallopUI
                         selectedColumn = lastEdit.col;
                         hexEditHistory.pop_back();
                     }
+                    markMemoryDirty();
                     return true;
                 }
 
@@ -283,13 +294,10 @@ namespace ScallopUI
                     }
                 }
 
-                bool request_update = need_refresh_ || data_ == nullptr || data_->empty();
-                data_ = Emulator::getMemory(base_addr_, size_, request_update, -1, cache_key_);
-                if (request_update)
-                {
-                    need_refresh_ = false;
-                }
+                data_ = Emulator::getMemory(base_addr_, size_, -1, cache_key_);
 
+                fprintf(stderr, "base addr = %llx, data = %p, size = %d\n", base_addr_, data_, size_);
+                
                 std::vector<Element> lines;
                 lines.reserve(rows_ + 2);
 

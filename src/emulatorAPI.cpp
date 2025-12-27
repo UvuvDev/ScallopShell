@@ -23,6 +23,9 @@
 #include <filesystem>
 #include <unordered_map>
 #include "debug.hpp"
+#include <bit>
+#include <mutex>
+#include <optional>
 
 int child_pid_ = -1;
 int sock_fd_ = -1;
@@ -32,6 +35,18 @@ static constexpr const char *kRegDump = "/tmp/regdump.txt";
 
 bool Emulator::isEmulating = false;
 static std::vector<InstructionInfo> instructionInfo;
+std::atomic_uint64_t Emulator::flags[MAX_VCPUS];
+
+namespace {
+struct PendingSetMem {
+    uint64_t address = 0;
+    int size = 0;
+    std::vector<uint8_t> data;
+};
+
+std::optional<PendingSetMem> g_pending_setmem;
+std::mutex g_pending_setmem_mu;
+} // namespace
 
 int socket_fd() { return sock_fd_; }
 int pid() { return child_pid_; }
@@ -143,6 +158,27 @@ std::fstream &GotoLine(std::fstream &file, unsigned int num)
 
 /*=============== Actual Emulator Functions ===============*/
 
+int Emulator::setFlag(int vcpu, vcpu_operation_t cmd) {
+    // Set the flag to be the cmd
+    flags[vcpu].store(flags[vcpu].load(std::memory_order_relaxed) | cmd, std::memory_order_relaxed); 
+
+    // Get how many shifts the flag was at ( 0b01000 would = 3 )
+    uint64_t flagIndex = std::countr_zero(static_cast<uint64_t>(cmd));
+
+    return 0;
+}
+
+
+int Emulator::removeFlag(int vcpu, vcpu_operation_t cmd) {
+    // FLAGS AND (FLAGS AND NOT CMD) = turning off only the inputted flag
+    flags[vcpu].store(flags[vcpu].load(std::memory_order_relaxed) & (~cmd), std::memory_order_relaxed);
+    return 0;
+}
+
+bool Emulator::getIsFlagQueued(int vcpu, vcpu_operation_t cmd) {
+    return (flags[vcpu].load(std::memory_order_relaxed) & cmd) == cmd;
+}
+
 int Emulator::startEmulation(const std::string &executablePathArg)
 {
     // ---- hardcoded paths (match your shell snippet) ----
@@ -156,12 +192,12 @@ int Emulator::startEmulation(const std::string &executablePathArg)
     // Outputs for QEMU
     std::string currentWorkingDir = ::getenv("PWD") ? ::getenv("PWD") : "";
     std::string qemuTraceLog = currentWorkingDir;
-    std::string pluginPath = ::getenv("SCALLOP_QEMU_PLUGIN") ? ::getenv("SCALLOP_QEMU_PLUGIN") : currentWorkingDir + "/qemu-plugins/" ;
+    std::string pluginPath = ::getenv("SCALLOP_QEMU_PLUGIN") ? ::getenv("SCALLOP_QEMU_PLUGIN") : currentWorkingDir + "/qemu-plugins/";
     std::string csvPath = "/tmp";
     qemuTraceLog += "/qemu.log";
-    std::cout << pluginPath <<std::endl;
+    std::cout << pluginPath << std::endl;
     pluginPath += "/scallop_plugin.so";
-    std::cout << pluginPath <<std::endl;
+    std::cout << pluginPath << std::endl;
     csvPath += "/branchPPPPlog.csv";
 
     /*
@@ -185,28 +221,28 @@ int Emulator::startEmulation(const std::string &executablePathArg)
 
     // ---- build argv: qemu -d plugin -D <log> -plugin <.so> -- <target> ----
     std::vector<std::string> args_str = {
-            qemuPath,
-            "-d", "plugin",
-            "-D", qemuTraceLog,
-            "-plugin", pluginPath,
-            "--",
-            executablePath};
-
+        qemuPath,
+        "-d", "plugin",
+        "-D", qemuTraceLog,
+        "-plugin", pluginPath,
+        "--",
+        executablePath};
 
     // If there's a new binary then replace the executable path
-    if (executablePathArg != "") {        
+    if (executablePathArg != "")
+    {
         executablePath = executablePathArg;
     }
 
     // Put everything in argv to prepare it for qemu
     std::vector<char *> argv;
     argv.reserve(args_str.size() + 1);
-    for (auto &s : args_str) {
+    for (auto &s : args_str)
+    {
         argv.push_back(const_cast<char *>(s.c_str()));
         OUT_TO_FILE(s + " ");
     }
     argv.push_back(nullptr);
-
 
     // ---- set up a pipe to capture child's stdout+stderr ----
     int pipefd[2];
@@ -245,8 +281,6 @@ int Emulator::startEmulation(const std::string &executablePathArg)
     if (socket.initialize() != 0)
     {
         perror("socket failed to initialize!");
-
-
     }
 
     // parent
@@ -263,28 +297,92 @@ int Emulator::addBreakpoint(uint64_t address, std::string &comment)
     return 0;
 }
 
-int Emulator::modifyMemory(uint64_t address, uint8_t *data, int n)
-{
-    if (!data || n <= 0)
-        return false;
+int Emulator::modifyMemory(uint64_t address, std::vector<uint8_t>* data, int n) {
+   
+    if (getIsFlagQueued(0, VCPU_OP_SET_MEM) == false) 
+        return 1;
+    
+    if (data == nullptr) {
+        return 1;
+    }
 
+    // If data is empty OR bytes is <= 0 then ret
+    if (data->empty() || n <= 0)
+        return 1;
+
+    const int copy_len = std::min(n, static_cast<int>(data->size()));
     std::string ret;
-    std::string memoryDumpWrite;
-    memoryDumpWrite.reserve(static_cast<size_t>(n) * 3);
+    std::string memoryDumpWrite; // String to save to file
+    memoryDumpWrite.reserve(static_cast<size_t>(copy_len) * 3);
 
-    for (int i = 0; i < n; ++i)
+    // For each byte
+    for (int i = 0; i < copy_len; ++i)
     {
-        memoryDumpWrite += hex1ByteStr(data[i]);
+        // Add to the memdump file
+        memoryDumpWrite += hex1ByteStr(data->at(i));
+
+        // If it's the 8th byte, newline
         if (((i + 1) % 8) == 0)
             memoryDumpWrite.push_back('\n');
         else
             memoryDumpWrite.push_back(' ');
     }
+
+    // If it runs out early, add a newline at the end
     if (!memoryDumpWrite.empty() && memoryDumpWrite.back() != '\n')
         memoryDumpWrite.back() = '\n';
 
+    // If writing the whole file works
     if (!writeWholeFile(kMemDump, memoryDumpWrite))
-        return false;
+        return 1;
+
+    char cmd[128];
+    std::snprintf(cmd, sizeof(cmd), "set memory 0x%llx %d\n",
+                  (unsigned long long)address, copy_len);
+    if (socket.sendCommand(cmd).compare(0, 2, "ok") != 0)
+        return 1;
+
+    
+    removeFlag(0, VCPU_OP_SET_MEM);
+    return 0;
+
+}
+
+int Emulator::modifyMemory(uint64_t address, uint8_t *data, int n)
+{
+    return 0;
+    /*
+    if (getIsFlagQueued(0, VCPU_OP_SET_MEM) == false) 
+        return 0;
+    
+    // If data = nullptr OR bytes is <= 0 then ret
+    if (!data || n <= 0)
+        return 0;
+    
+    std::string ret;
+    std::string memoryDumpWrite; // String to save to file
+    memoryDumpWrite.reserve(static_cast<size_t>(n) * 3);
+
+    // For each byte
+    for (int i = 0; i < n; ++i)
+    {
+        // Add to the memdump file
+        memoryDumpWrite += hex1ByteStr(data[i]);
+
+        // If it's the 8th byte, newline
+        if (((i + 1) % 8) == 0)
+            memoryDumpWrite.push_back('\n');
+        else
+            memoryDumpWrite.push_back(' ');
+    }
+
+    // If it runs out early, add a newline at the end
+    if (!memoryDumpWrite.empty() && memoryDumpWrite.back() != '\n')
+        memoryDumpWrite.back() = '\n';
+
+    // If writing the whole file works
+    if (!writeWholeFile(kMemDump, memoryDumpWrite))
+        return 0;
 
     uint64_t span = static_cast<uint64_t>(n - 1);
     uint64_t hi = address;
@@ -293,12 +391,57 @@ int Emulator::modifyMemory(uint64_t address, uint8_t *data, int n)
     else
         hi = address + span;
 
+    // Send the command
     char cmd[128];
     std::snprintf(cmd, sizeof(cmd), "set memory 0x%llx;0x%llx\n",
                   (unsigned long long)address, (unsigned long long)hi);
     if (socket.sendCommand(cmd).compare(0, 2, "ok") != 0)
         return false;
-    return ret.rfind("ok", 0) == 0;
+
+    return ret.rfind("ok", 0) == 0; */
+}
+
+void Emulator::stageMemoryWrite(uint64_t address, const std::vector<uint8_t>& data, int n)
+{
+    if (n <= 0 || data.empty())
+    {
+        return;
+    }
+    PendingSetMem staged;
+    staged.address = address;
+    staged.size = std::min(n, static_cast<int>(data.size()));
+    staged.data.assign(data.begin(), data.begin() + staged.size);
+
+    std::lock_guard<std::mutex> lock(g_pending_setmem_mu);
+    g_pending_setmem = std::move(staged);
+}
+
+bool Emulator::hasStagedMemoryWrite()
+{
+    std::lock_guard<std::mutex> lock(g_pending_setmem_mu);
+    return g_pending_setmem.has_value();
+}
+
+int Emulator::flushStagedMemoryWrite()
+{
+    PendingSetMem staged;
+    {
+        std::lock_guard<std::mutex> lock(g_pending_setmem_mu);
+        if (!g_pending_setmem)
+        {
+            return 0;
+        }
+        staged = *g_pending_setmem;
+        g_pending_setmem.reset();
+    }
+
+    int rc = modifyMemory(staged.address, &staged.data, staged.size);
+    if (rc != 0)
+    {
+        std::lock_guard<std::mutex> lock(g_pending_setmem_mu);
+        g_pending_setmem = std::move(staged);
+    }
+    return rc;
 }
 
 int Emulator::focusMemory(uint64_t lowAddress, uint64_t highAddress)
@@ -327,40 +470,50 @@ namespace
     }
 } // namespace
 
-std::vector<uint8_t> *Emulator::getMemory(uint64_t address, int n, bool _update,
+std::vector<uint8_t>* Emulator::getMemory(uint64_t address, int n,
                                           int targetMods, const std::string &cacheKey)
 {
     auto &cache = memoryCaches()[cacheKey];
     const uint64_t kNoAddress = std::numeric_limits<uint64_t>::max();
 
-    
-
+    // If addr = -1 was passed in, save it to the cache
     if (address != kNoAddress)
         cache.address = address;
+
+    // If size changed, store it in cache.span
     if (n != -1)
         cache.span = n;
 
-    if (cache.address == kNoAddress || cache.span <= 0) {
-        OUT_TO_FILE("A\n");
-        return &cache.data;
+    // If the cache address = -1 or the size is less than 1
+    if (cache.address == kNoAddress || cache.span <= 0)
+    {
+        return &cache.data; // Ret the data (probably nullptr)
     }
-    if (!_update && !cache.tryUpdateAgain) {
-        OUT_TO_FILE("B\n");
-        return &cache.data;
+    
+    const bool update_requested = getIsFlagQueued(0, VCPU_OP_DUMP_MEM);
+    // If the flag isn't here and it isn't supposed to update again:
+    if (!update_requested && !cache.tryUpdateAgain)
+    {
+        return &cache.data; // Return the old data
     }
 
-    if (targetMods != -1) {
-        OUT_TO_FILE("C\n");
+    // Return how many times getMemory has to change 
+    if (targetMods != -1)
+    {
         cache.targetModifications = targetMods;
     }
 
-    if (!_update) {
-        OUT_TO_FILE("D\n");
+    if (!update_requested)
+    {
         return &cache.data;
     }
 
+    fprintf(stderr, "flag is queued, ready to get memory\n");
+
+    // Decremement span because it's going to do another modification
     uint64_t span = static_cast<uint64_t>(cache.span - 1);
     uint64_t hi = cache.address;
+
     if (span > std::numeric_limits<uint64_t>::max() - cache.address)
         hi = std::numeric_limits<uint64_t>::max();
     else
@@ -370,38 +523,22 @@ std::vector<uint8_t> *Emulator::getMemory(uint64_t address, int n, bool _update,
     std::snprintf(cmd, sizeof(cmd), "get memory 0x%llx %d\n",
                   (unsigned long long)cache.address, n);
 
-    OUT_TO_FILE(cmd);
-
-
-    static uint64_t lastAddress = cache.address;
-
-    
-    char TEST_SET[128];
-    std::snprintf(TEST_SET, sizeof(TEST_SET), "set memory 0x%llx %d\n",
-                  (unsigned long long)cache.address, n);
-
-    if (socket.sendCommand(TEST_SET).compare(0, 2, "ok") != 0)
-    {
-        cache.tryUpdateAgain = true;
-        return &cache.data;
-    }
+    fprintf(stderr, "%s\n", cmd);
 
     if (socket.sendCommand(cmd).compare(0, 2, "ok") != 0)
     {
         cache.tryUpdateAgain = true;
+        fprintf(stderr, "     trying again, didnt send ok back\n");
         return &cache.data;
     }
 
-    if (lastAddress != cache.address) lastAddress = cache.address;
-
-    OUT_TO_FILE("sent command!\n");
-
+    fprintf(stderr, "sent command\n");
 
     std::ifstream memoryFile(kMemDump, std::ios::in);
     if (!memoryFile.is_open())
     {
 
-        OUT_TO_FILE("mem file not open\n");
+        fprintf(stderr, "memory file is not open\n");
 
         cache.tryUpdateAgain = true;
         return &cache.data;
@@ -444,6 +581,7 @@ std::vector<uint8_t> *Emulator::getMemory(uint64_t address, int n, bool _update,
     if (cache.data.size() > static_cast<size_t>(cache.span))
         cache.data.resize(static_cast<size_t>(cache.span));
 
+    const bool should_clear_flag = update_requested;
     if (cache.targetModifications > 0)
     {
         cache.modificationsMade++;
@@ -452,6 +590,10 @@ std::vector<uint8_t> *Emulator::getMemory(uint64_t address, int n, bool _update,
             cache.targetModifications = 0;
             cache.modificationsMade = 0;
             cache.tryUpdateAgain = false;
+            if (should_clear_flag)
+            {
+                removeFlag(0, VCPU_OP_DUMP_MEM);
+            }
         }
         else
         {
@@ -462,40 +604,43 @@ std::vector<uint8_t> *Emulator::getMemory(uint64_t address, int n, bool _update,
     {
         cache.modificationsMade = 0;
         cache.tryUpdateAgain = false;
+        if (should_clear_flag)
+        {
+            removeFlag(0, VCPU_OP_DUMP_MEM);
+        }
     }
 
     return &cache.data;
 }
 
-std::vector<std::string> *Emulator::getRegisters(bool _update)
+std::vector<std::string> *Emulator::getRegisters()
 {
     static bool tryagain = true;
     static std::vector<std::string> registers;
 
-    if (_update)
-    {
-        tryagain = true;
-    }
-
-    if (!tryagain)
+    const bool update_requested = getIsFlagQueued(0, VCPU_OP_DUMP_REGS);
+    if (!update_requested && !tryagain)
     {
         return &registers;
     }
 
-    // Request registers
+    // Request registers (either because a refresh was requested or we're still waiting on a retry)
     if (socket.sendCommand("get registers\n").compare(0, 2, "ok") != 0)
     {
         OUT_TO_FILE("got ok\n");
+        tryagain = true;
         return &registers;
     }
-    else {
+    else
+    {
         OUT_TO_FILE("still sent the command but no ok\n");
-    }    
+    }
 
     // Open regdump
     std::ifstream regDump(kRegDump, std::ios::in);
     if (!regDump.is_open())
     {
+        tryagain = true;
         return &registers;
     }
 
@@ -514,6 +659,10 @@ std::vector<std::string> *Emulator::getRegisters(bool _update)
     {
         registers = std::move(registersTemp);
         tryagain = false;
+        if (update_requested)
+        {
+            removeFlag(0, VCPU_OP_DUMP_REGS);
+        }
     }
 
     return &registers;
@@ -535,16 +684,43 @@ Emulator::getInstructionJumpPaths(uint64_t address)
 
 int Emulator::step(int steps)
 {
+    if (hasStagedMemoryWrite())
+    {
+        setFlag(0, VCPU_OP_SET_MEM);
+        if (flushStagedMemoryWrite() != 0)
+        {
+            fprintf(stderr, "[scallop] failed to stage memory write\n");
+            removeFlag(0, VCPU_OP_SET_MEM);
+        }
+    }
+
     std::string ret;
     bool exitCode = socket.sendCommand(std::string("step ") + std::to_string(steps)).compare(0, 2, "ok") != 0;
-    getRegisters(true); // mark cached registers dirty so UI reloads from file
+    setFlag(0, VCPU_OP_DUMP_MEM);
+    setFlag(0, VCPU_OP_DUMP_REGS);
+    setFlag(0, VCPU_OP_SET_REGS);
+    getRegisters();
     return exitCode;
 }
 
 int Emulator::continueExec()
 {
+    if (hasStagedMemoryWrite())
+    {
+        setFlag(0, VCPU_OP_SET_MEM);
+        if (flushStagedMemoryWrite() != 0)
+        {
+            fprintf(stderr, "[scallop] failed to stage memory write\n");
+            removeFlag(0, VCPU_OP_SET_MEM);
+        }
+    }
+
     std::string ret;
-    return socket.sendCommand("resume").compare(0, 2, "ok") != 0;
+    bool exitCode = socket.sendCommand("resume").compare(0, 2, "ok") != 0;
+    setFlag(0, VCPU_OP_DUMP_MEM);
+    setFlag(0, VCPU_OP_DUMP_REGS);
+    setFlag(0, VCPU_OP_SET_REGS);
+    return exitCode;
 }
 
 std::string Emulator::disassembleInstruction(uint64_t address,
@@ -570,7 +746,6 @@ std::vector<InstructionInfo> *Emulator::getRunInstructions(int start_line, int n
     static uintmax_t cached_size = 0;
     static std::time_t cached_mtime = 0;
 
-    
     // check file state
     std::error_code ec;
     auto sz = std::filesystem::file_size(kCsvPath, ec);

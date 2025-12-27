@@ -6,7 +6,6 @@ int regDump()
     //debug("STARTED REGDUMP\n");
     // Reg Dump flag is not set, return
     if (scallopstate.getIsFlagQueued(vcpu_current_thread_index, VCPU_OP_DUMP_REGS)) {
-            //debug("not requested");
         return -1;
     }
 
@@ -35,8 +34,15 @@ int regDump()
                 // Read into an empty GByteArray so QEMU sets the true size.
                 GByteArray *val = g_byte_array_new();
                 int got = qemu_plugin_read_register(d->handle, val);
+
                 if (got > 0 && (guint)got == val->len)
                 {
+                    // If it's a program counter, do it differently. please change later, this is a hack
+                    if (!strncmp(d->name, "rip", 3) || !strncmp(d->name, "eip", 3)) {
+                        fprintf(f, "%s=0x%llx", d->name, cur_pc);
+                        fputc('\n', f);
+                        continue;
+                    }
                     fprintf(f, "%s=0x", d->name);
                     for (int j = got - 1; j >= 0; j--)
                         fprintf(f, "%02x", val->data[j]);
