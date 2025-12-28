@@ -6,6 +6,10 @@
 
 using namespace ftxui;
 
+/**
+ * Pull from Emulator::getRegisters() and grep for the input string
+ * @param registerArg Register to check
+ */
 uint64_t getRegisterValue(const std::string& registerArg) {
     std::vector<std::string>* regs = Emulator::getRegisters();
     if (!regs || regs->empty()) {

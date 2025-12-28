@@ -32,7 +32,7 @@ int main()
   auto screen = ScreenInteractive::Fullscreen();
   ftxui::ScreenInteractive* g_screen = &screen;
 
-  const int memoryRange = 0;
+  const int memoryRange = 320;
   auto mem  = ScallopUI::MemoryDisplay(nullptr, "rsp", memoryRange, 0, 8);
   auto code  = ScallopUI::MemoryDisplay(nullptr, "rip", memoryRange, 0, 8);
   auto notes = ScallopUI::Notepad();
@@ -55,7 +55,6 @@ int main()
       "memory",
       "code",
       "notepad",
-      "regs",
   };
   
   int tab_selected = 0;
@@ -72,7 +71,6 @@ int main()
           mem, 
           code,
           notes,
-          regs,
       },
       &tab_selected);
 
@@ -97,15 +95,28 @@ int main()
   /*===============*/
 
   auto disasm = ScallopUI::DisasmDisplay();
-  int disasmSize = 100;
+  int disasmSize = 50;
 
-  auto right_stack = Container::Vertical({
+  auto middle_stack = Container::Vertical({
     disasm,        // ensure DisasmDisplay() is focusable
   });
-  auto right_render = Renderer(right_stack, [&] {
+  auto middle_render = Renderer(middle_stack, [&] {
     return disasm->Render();
   });
-  auto centerTop = ResizableSplitLeft(left_render, right_render, &disasmSize);
+  auto leftAndMiddleTop = ResizableSplitLeft(left_render, middle_render, &disasmSize);
+
+  /*===============*/
+  
+  int registerSize = 100;
+
+  auto right_stack = Container::Vertical({
+    regs,        // ensure DisasmDisplay() is focusable
+  });
+  auto right_render = Renderer(middle_stack, [&] {
+    return hbox({regs->Render()});
+  });
+
+  auto centerTop = ResizableSplitLeft(leftAndMiddleTop, right_render, &registerSize);
 
   /*===============*/
 
