@@ -21,3 +21,5 @@ cmake --build "$BUILD_DIR" -j"$(nproc)"
 ln -sf build/compile_commands.json compile_commands.json
 
 echo "Binary: $BUILD_DIR/scallop"
+
+cp ./build/scallop /usr/bin/

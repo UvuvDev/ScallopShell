@@ -10,28 +10,53 @@ namespace ScallopUI {
         class Impl : public ComponentBase {
         private:
             int rows;
-            int bottomRow = 0;
+            int currentTopRow = 0;
             int min_top = 37;
             int instructionCount = 0;
-            Box renderedArea;           
+            int maxTopRow = 0;
+            Box renderedArea;         
+            bool follow_tail = true; 
+            int totalLines = 0;
+            int lastTotalLines = 0;  
 
             bool Focusable() const override { return true; }
 
             bool OnEvent(Event e) override {
                 
-                if (e == Event::ArrowUp)
-                {
-                    if (bottomRow > 0)
-                        bottomRow--;
-                    
+                if (e == Event::ArrowUp) {
+                    if (currentTopRow > 0) currentTopRow--;
+                    follow_tail = false;
                     return true;
                 }
-                if (e == Event::ArrowDown)
-                {
-                    if (bottomRow < instructionCount)
-                        bottomRow++;
+
+                if (e == Event::PageUp) {
+                    currentTopRow = std::max(0, currentTopRow - min_top);
+                    follow_tail = false;
                     return true;
                 }
+
+                if (e == Event::ArrowDown) {
+                    int maxTopRow = std::max(0, totalLines - min_top);
+                    if (currentTopRow < maxTopRow) currentTopRow++;
+                    if (currentTopRow >= maxTopRow) follow_tail = true; // user came back to bottom
+                    return true;
+                }
+
+                if (e == Event::PageDown) {
+                    int maxTopRow = std::max(0, totalLines - min_top);
+                    currentTopRow = std::min(maxTopRow, currentTopRow + min_top);
+                    if (currentTopRow >= maxTopRow) follow_tail = true;
+                    return true;
+                }
+                if (e == Event::g) {
+                    int maxTopRow = std::max(0, totalLines - min_top);
+                    currentTopRow = maxTopRow;
+                    follow_tail = true;
+                    return true;
+                }
+
+
+
                 
                 
                 return ComponentBase::OnEvent(e); // forward anything else
@@ -41,14 +66,28 @@ namespace ScallopUI {
             Element OnRender() override {
 
                 std::vector<Element> lines;
-                static int hasUpdated = false;
+                static bool hasUpdated = 0;
                 
-
-                //if (hasUpdated > 0) { bottomRow = hasUpdated; }
-
-                const std::vector<InstructionInfo>* assemblyInstructions = Emulator::getRunInstructions(bottomRow, min_top, &hasUpdated);
+            
+                const std::vector<InstructionInfo>* assemblyInstructions = Emulator::getRunInstructions(currentTopRow, min_top, &hasUpdated, &totalLines);
 
                 instructionCount = assemblyInstructions->size();
+                maxTopRow = std::max(0, totalLines - min_top);
+
+                auto at_bottom = [&]{
+                    int slack = 0;
+                    return currentTopRow >= std::max(0, maxTopRow - slack);
+                };
+
+                if (hasUpdated) {
+                    // If the user was at bottom, keep them at bottom.
+                    // Also: if this is first load, follow tail.
+                    if (follow_tail || at_bottom()) {
+                        currentTopRow = maxTopRow;
+                        follow_tail = true;
+                    }
+                }
+                lastTotalLines = totalLines;
                 
                 auto header = hbox({text("  Disassembly View")}) | underlined | dim | bold | color(Color::CornflowerBlue);
                 lines.push_back(header);

@@ -141,8 +141,8 @@ namespace ScallopUI
                   bpr_(bpr),
                   rows_(rows),
                   followedReg_(std::move(followedReg)),
-                  cache_key_(followedReg_.empty() ? "default" : followedReg_),
-                  need_refresh_(true) {
+                  cache_key_(followedReg_.empty() ? "default" : followedReg_)
+                  {
                   }
 
         private:
@@ -164,7 +164,6 @@ namespace ScallopUI
             std::vector<std::pair<int,int>> editTrail;  // Highlights for edited bits
             std::string followedReg_;
             std::string cache_key_;
-            bool need_refresh_ = true;
             int current_vcpu = 0;
 
             bool Focusable() const override { return true; }
@@ -221,11 +220,6 @@ namespace ScallopUI
                         return handleMouseTakeover(m);
                     }
                     return false;
-                }
-                if (e == Event::Character('r') || e == Event::Character('R'))
-                {
-                    need_refresh_ = true;
-                    return true;
                 }
                 if (e == Event::ArrowUp)
                 {
@@ -287,21 +281,20 @@ namespace ScallopUI
             Element OnRender() override
             {
 
+                // Check if a specific register is being tracked
                 if (!followedReg_.empty())
                 {
+                    // If the value doesn't equal the current base address
                     uint64_t regValue = getRegisterValue(followedReg_);
                     if (regValue != base_addr_)
                     {
                         base_addr_ = regValue;
                         top_row_ = 0;
-                        need_refresh_ = true;
                     }
                 }
 
                 data_ = Emulator::getMemory(base_addr_, size_, -1, cache_key_);
 
-                fprintf(stderr, "base addr = %llx, data = %p, size = %d\n", base_addr_, data_, size_);
-                
                 std::vector<Element> lines;
                 lines.reserve(rows_ + 2);
 

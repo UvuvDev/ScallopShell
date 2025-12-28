@@ -736,138 +736,141 @@ bool Emulator::getIsEmulating()
 {
     return isEmulating;
 }
+std::vector<InstructionInfo>* Emulator::getRunInstructions(
+    int start_line,
+    int n,
+    bool* updated,
+    int* total_lines_out
+) {
+    static const char* kCsvPath = "/tmp/branchlog.csv";
 
-std::vector<InstructionInfo> *Emulator::getRunInstructions(int start_line, int n, int *updated)
-{
-    static const char *kCsvPath = "/tmp/branchlog.csv";
-
-    // simple cache of the last request & file state
     static int cached_start = -1, cached_n = -1;
     static uintmax_t cached_size = 0;
     static std::time_t cached_mtime = 0;
+    static int cached_total_lines = 0;
 
-    // check file state
+    // ---------- file state ----------
     std::error_code ec;
     auto sz = std::filesystem::file_size(kCsvPath, ec);
     std::time_t mt = 0;
-    if (ec)
-    {
-        std::filesystem::file_time_type ft = std::filesystem::last_write_time(kCsvPath, ec);
-        if (!ec)
-        {
+
+    if (!ec) { 
+        auto ft = std::filesystem::last_write_time(kCsvPath, ec);
+        if (!ec) {
             auto sctp = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
                 ft - std::filesystem::file_time_type::clock::now() + std::chrono::system_clock::now());
             mt = std::chrono::system_clock::to_time_t(sctp);
         }
     }
 
-    // serve from cache if request & file are unchanged
-    if (cached_start == start_line && cached_n == n && sz == cached_size && mt == cached_mtime)
-    {
-        *updated = 0;
+    const bool file_unchanged =
+        (cached_start == start_line && cached_n == n && sz == cached_size && mt == cached_mtime);
+
+    if (file_unchanged) {
+        if (updated) *updated = false;
+        if (total_lines_out) *total_lines_out = cached_total_lines;
         return &instructionInfo;
     }
 
+    // file changed or request changed
+    if (updated) *updated = true;
+
     instructionInfo.clear();
 
-    // open fresh each call (cheap, robust)
     std::ifstream f(kCsvPath, std::ios::in | std::ios::binary);
-    if (!f)
-    {
-        // file not there yet; keep buffer empty and update cache keys
+    if (!f) {
         cached_start = start_line;
         cached_n = n;
         cached_size = sz;
         cached_mtime = mt;
+        cached_total_lines = 0;
+        if (total_lines_out) *total_lines_out = 0;
         return &instructionInfo;
     }
 
-    // Alert the caller that there's new instructions
-    if (updated != nullptr)
-        *updated = true;
-
-    // read first line (header) and discard it if it isn't a PC like 0x...
+    // ---------- header handling ----------
     std::string line;
-    if (std::getline(f, line))
-    {
+
+    bool first_line_is_data = false;
+    std::streampos after_first = 0;
+
+    if (std::getline(f, line)) {
         std::string t = trim(line);
-        bool looks_pc = t.size() >= 3 && t[0] == '0' && (t[1] == 'x' || t[1] == 'X');
-        if (looks_pc)
-        {
-            // header missing; that was actually data → process below by treating it as row 0
-            // Rewind to beginning of file and skip zero lines logic will re-read it.
-            f.clear();
-            f.seekg(0, std::ios::beg);
-        }
-    }
-    // now skip the header line (we already consumed it if it was a true header)
-    // and fast-skip start_line rows
-    int to_skip = start_line;
-    while (to_skip-- > 0 && std::getline(f, line))
-    {
-        // discard
+        first_line_is_data = (t.size() >= 3 && t[0] == '0' && (t[1] == 'x' || t[1] == 'X'));
+        after_first = f.tellg();
     }
 
-    // read up to n data lines
-    int added = 0;
-    while ((n <= 0 || added < n) && std::getline(f, line))
-    {
+    // If first line was header: keep stream after it.
+    // If first line was data: rewind so we include it in counting and paging.
+    if (first_line_is_data) {
+        f.clear();
+        f.seekg(0, std::ios::beg);
+    } else {
+        // already consumed header; keep going
+        // (we are currently positioned after first line)
+    }
+
+    // ---------- count + page in one pass ----------
+    int data_index = 0;       // counts ONLY valid data rows
+    int returned = 0;
+    int total_data_rows = 0;
+
+    while (std::getline(f, line)) {
         std::string s = trim(line);
-        if (s.empty())
-            continue;
+        if (s.empty()) continue;
 
-        // must be a data row: first column starts with 0x
         auto cols = parse_csv(s);
-        if (cols.size() < 5)
-            continue;
-        const std::string &c0 = cols[0];
+        if (cols.size() < 5) continue;
+
+        const std::string& c0 = cols[0];
         if (c0.size() < 3 || !(c0[0] == '0' && (c0[1] == 'x' || c0[1] == 'X')))
-            continue;
+            continue; // not a data row
 
-        uint64_t pc = parse_hex(cols[0]);
-        std::string disType = trim(cols[1]);
-        uint64_t bt = parse_hex(cols[2]);
-        uint64_t ft = parse_hex(cols[3]);
-        std::string dis;
-        if (cols.size() >= 6)
-            dis = trim(cols[5]);
-        else
-            dis.clear();
+        // This is a data row
+        total_data_rows++;
 
-        // fallback classify if kind ever blank
-        if (disType.empty())
-        {
-            size_t i = 0;
-            while (i < dis.size() && std::isspace((unsigned char)dis[i]))
-                ++i;
-            size_t j = i;
-            while (j < dis.size() && !std::isspace((unsigned char)dis[j]))
-                ++j;
-            std::string m = dis.substr(i, j - i);
-            for (char &c : m)
-                c = (char)std::tolower((unsigned char)c);
-            if (m == "ret" || m == "retq" || m == "retn" || m == "iret")
-                disType = "ret";
-            else if (m == "jmp" || m == "ljmp")
-                disType = "jmp";
-            else if (m == "call" || m == "callq" || m == "lcall")
-                disType = "call";
-            else if (!m.empty() && m[0] == 'j' && m != "jmp")
-                disType = "cond";
-            else
-                disType = "other";
+        // If it's inside the requested window, parse & store it
+        if (data_index >= start_line && (n <= 0 || returned < n)) {
+            uint64_t pc = parse_hex(cols[0]);
+            std::string disType = trim(cols[1]);
+            uint64_t bt = parse_hex(cols[2]);
+            uint64_t ft = parse_hex(cols[3]);
+
+            std::string dis = (cols.size() >= 6) ? trim(cols[5]) : std::string{};
+
+            if (disType.empty()) {
+                // your fallback classify logic (unchanged)
+                size_t i = 0;
+                while (i < dis.size() && std::isspace((unsigned char)dis[i])) ++i;
+                size_t j = i;
+                while (j < dis.size() && !std::isspace((unsigned char)dis[j])) ++j;
+                std::string m = dis.substr(i, j - i);
+                for (char &c : m) c = (char)std::tolower((unsigned char)c);
+
+                if (m == "ret" || m == "retq" || m == "retn" || m == "iret") disType = "ret";
+                else if (m == "jmp" || m == "ljmp") disType = "jmp";
+                else if (m == "call" || m == "callq" || m == "lcall") disType = "call";
+                else if (!m.empty() && m[0] == 'j' && m != "jmp") disType = "cond";
+                else disType = "other";
+            }
+
+            instructionInfo.emplace_back(std::move(dis), std::move(disType), pc, bt, ft, bt ? 1u : 0u);
+            ++returned;
         }
 
-        instructionInfo.emplace_back(std::move(dis), std::move(disType), pc, bt, ft, bt ? 1u : 0u);
-        OUT_TO_FILE(dis);
-        ++added;
+        data_index++;
+
+        // If we've already returned n lines AND we only care about total_lines for PageDown,
+        // we still need to keep counting to end-of-file. So do NOT break.
     }
 
-    *updated = added;
-    // update cache keys
+    // cache bookkeeping
     cached_start = start_line;
     cached_n = n;
     cached_size = sz;
     cached_mtime = mt;
+    cached_total_lines = total_data_rows;
+
+    if (total_lines_out) *total_lines_out = total_data_rows;
     return &instructionInfo;
 }

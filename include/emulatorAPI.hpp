@@ -124,7 +124,7 @@ public:
 
     static std::string disassembleInstruction(uint64_t address, std::shared_ptr<uint8_t> data, int n = 16);
 
-    static std::vector<InstructionInfo>* getRunInstructions(int line, int n, int* updated);
+    static std::vector<InstructionInfo>* getRunInstructions(int line, int n, bool* updated, int* total_lines_out);
 
     static bool getIsEmulating();
 
