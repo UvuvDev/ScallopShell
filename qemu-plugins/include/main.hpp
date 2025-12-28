@@ -40,6 +40,7 @@ enum class SCALLOP_REQUEST_TYPE {
     resume,
     setMem,
     setReg,
+    breakpoint
 };
 
 /**

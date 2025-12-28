@@ -27,12 +27,15 @@ void GateManager::initAll() {
 }
 
 void GateManager::pauseAll() {
+    
     for (auto &gate : gates_) {
         gate.running.store(0, std::memory_order_relaxed);
     }
 }
 
 void GateManager::resumeAll() {
+    debug("RESUME GM this=%p\n", (void*)this);
+
     for (auto &gate : gates_) {
         gate.running.store(1, std::memory_order_relaxed);
         pthread_mutex_lock(&gate.mu);
@@ -65,6 +68,31 @@ void GateManager::waitIfNeeded(unsigned vcpu, uint64_t pc) {
 
 
     gate_t &gate = gateFor(vcpu);
+
+    debug("GM this=%p gate=%p vcpu=%u running=%d\n",
+      (void*)this, (void*)&gate, vcpu,
+      (int)gate.running.load(std::memory_order_relaxed));
+
+
+    debug("vcpu = %d", vcpu);
+    debug(", %llx = pc,   is break = %d\n", pc, isBreakpoint(pc, gate));
+    if (isBreakpoint(pc, gate)) {
+        /*for (;;) {
+            if (gate.running.load(std::memory_order_relaxed)) {
+                break;
+            }
+            long tokens = gate.tokens.load(std::memory_order_relaxed);
+            if (tokens > 0) {
+                gate.tokens.fetch_sub(1, std::memory_order_relaxed);
+                break;
+            }
+            pthread_cond_wait(&gate.cv, &gate.mu);
+        }*/
+        debug("8490482309483290432904324u320942\n");
+        pauseAll();
+    
+        //return;
+    }
 
     if (gate.running.load(std::memory_order_relaxed)) {
         return;

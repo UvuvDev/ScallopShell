@@ -22,6 +22,11 @@ void step(int n = 1)
     lastRunArgs.emplace_back(n);
 }
 
+void breakpoint(uint64_t addr) {
+    static std::string random = "";
+    Emulator::addBreakpoint(addr, random);
+}
+
 void continueExec()
 {
     lastRunFunction = LastRunFunction::continueExec;
@@ -219,7 +224,7 @@ namespace ScallopUI
 
       
         auto continCmd = app.add_subcommand("continue", "Run program until breakpoint or program exit");
-        continCmd->callback(dumpMemory);
+        continCmd->callback(continueExec);
 
 
         uint64_t low, high;
@@ -233,14 +238,50 @@ namespace ScallopUI
             ->expected(1)                 
             ->check(CLI::PositiveNumber);    // or CLI::Range(1, 1'000'000)
         focusMem->callback([&](){
-            focusMemory(low, high); // pass the parsed value (or default) into step()
+            focusMemory(low, high);
         });
 
-        auto help3 = app.add_subcommand("dump", "Dump memory");
-        help3->callback(dumpMemory);
+        auto dumpMem = app.add_subcommand("dump", "Dump memory");
+        dumpMem->callback(dumpMemory);
 
         auto reset = app.add_subcommand("reset");
         reset->callback(resetEmulator);
+
+        std::string breakAddrStr;
+
+        auto breakAt = app.add_subcommand("break", "Add a breakpoint");
+        breakAt->add_option("addr", breakAddrStr, "Address (decimal or 0x...)")
+            ->required();
+
+        breakAt->callback([&](){
+
+            std::cerr << "breakAddr currently = " << breakAddrStr << "\n";
+           
+            uint64_t addr = 0;
+            try {
+                size_t idx = 0;
+                int base = 10;
+
+                if (breakAddrStr.size() > 2 && breakAddrStr[0] == '0' &&
+                (breakAddrStr[1] == 'x' || breakAddrStr[1] == 'X')) {
+                    base = 16;
+                }
+
+                addr = std::stoull(breakAddrStr, &idx, base);
+
+                // reject trailing junk like "0x123abcZZ"
+                if (idx != breakAddrStr.size())
+                    throw std::invalid_argument("trailing characters");
+
+            } catch (...) {
+                throw CLI::ValidationError("addr", "Invalid address: " + breakAddrStr);
+            }
+            
+            std::cerr << "breakAddr currently = " << addr << "\n";
+           
+            breakpoint(addr);
+        });
+        // 0x7f4d0c6be3d4
     }
 
 } // namespace ScallopUI

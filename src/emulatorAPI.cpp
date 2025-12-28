@@ -292,8 +292,12 @@ int Emulator::startEmulation(const std::string &executablePathArg)
 
 int Emulator::addBreakpoint(uint64_t address, std::string &comment)
 {
-    (void)address;
-    (void)comment;
+    char cmd[128];
+    std::snprintf(cmd, sizeof(cmd), "break 0x%llx\n", address);
+    fprintf(stderr, "%s", cmd);
+    if (socket.sendCommand(cmd).compare(0, 2, "ok") != 0)
+        return 1;
+
     return 0;
 }
 

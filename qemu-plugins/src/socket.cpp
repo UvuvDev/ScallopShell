@@ -138,6 +138,7 @@ void ScallopSocket::handleClient(MinimalSocket::tcp::TcpConnectionBlocking conne
                 if (line.empty()) {
                     continue;
                 }
+
                 state_.enqueueRawRequest(line);
                 
                 try {

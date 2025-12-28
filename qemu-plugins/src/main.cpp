@@ -172,7 +172,7 @@ SCALLOP_REQUEST_TYPE ScallopState::classifyRequest(const std::string &request) c
         return normalized.rfind(prefix, 0) == 0;
     };
 
-    //debug("req = %s\n", normalized.c_str());
+    debug("req = %s\n", normalized.c_str());
 
     if (starts_with("get memory") || starts_with("memdump"))
     {
@@ -197,6 +197,10 @@ SCALLOP_REQUEST_TYPE ScallopState::classifyRequest(const std::string &request) c
     if (starts_with("resume"))
     {
         return SCALLOP_REQUEST_TYPE::resume;
+    }
+    if (starts_with("break"))
+    {
+        return SCALLOP_REQUEST_TYPE::breakpoint;
     }
     return SCALLOP_REQUEST_TYPE::defaultReq;
 }
@@ -338,6 +342,17 @@ int ScallopState::update(int vcpu)
         case SCALLOP_REQUEST_TYPE::resume:
         {
             scallopstate.getGates().resumeAll();
+            break;
+        }
+        case SCALLOP_REQUEST_TYPE::breakpoint:
+        {
+            uint64_t addr;
+
+            // Read the request arguments from the req
+            sscanf(req.getRequest().c_str(), "break 0x%llx", &addr);
+
+            debug("%s ...... parsed val = %llx", req.getRequest().c_str(), addr);
+            scallopstate.getGates().addBreakpoint(addr, vcpu);
             break;
         }
         }
