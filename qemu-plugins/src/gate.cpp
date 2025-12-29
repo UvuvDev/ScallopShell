@@ -12,6 +12,11 @@ GateManager::GateManager()
         gate.tokens.store(0, std::memory_order_relaxed);
         pthread_mutex_init(&gate.mu, nullptr);
         pthread_cond_init(&gate.cv, nullptr);
+
+        pthread_mutex_init(&gate.bp_write_mu, nullptr);
+        std::atomic_store(&gate.bp_vec, std::make_shared<const std::vector<uint64_t>>());
+
+
     }
 }
 

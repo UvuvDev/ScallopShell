@@ -5,6 +5,7 @@
 #include "functional"
 #include "string"
 #include "unordered_map"
+#include "memory"
 
 constexpr unsigned MAX_VCPUS = 64;
 
@@ -13,7 +14,9 @@ struct gate_t {
     std::atomic<long> tokens;   /* available instruction credits */
     pthread_mutex_t mu;
     pthread_cond_t cv;
-    std::unordered_map<uint64_t, int> breakpoints;
+    
+    std::shared_ptr<const std::vector<uint64_t>> bp_vec; // accessed atomically via atomic_load/store
+    pthread_mutex_t bp_write_mu; // serialize writers 
 };
 
 class GateManager {
@@ -43,7 +46,7 @@ public:
      * @param address Address to break at
      */
     int addBreakpoint(uint64_t address, int vcpu);
-
+    
     /**
      * Checks if there's a breakpoint at the specified address
      */

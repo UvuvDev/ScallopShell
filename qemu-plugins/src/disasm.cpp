@@ -101,12 +101,26 @@ struct exec_ctx
  */
 static void log(unsigned int vcpu_index, void *udata)
 {
+
+    
+
     debug("\n\nHEAD OF LOG\n");
     auto *ctx = static_cast<exec_ctx *>(udata);
     if (!ctx || !scallopstate.g_out)
     {
         return;
     }
+
+    
+    static int64_t startCode = qemu_plugin_start_code();
+    static int64_t endCode = qemu_plugin_end_code();
+    if (ctx->pc >= startCode && ctx->pc < startCode + endCode)
+        ;
+    else 
+        return;
+        
+    
+    debug("entry code = %llx\n", qemu_plugin_start_code());
 
     //debug("rip = 0x%" PRIx64 "\n", ctx->pc);
     int written = 0;
