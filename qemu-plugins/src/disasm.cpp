@@ -92,6 +92,7 @@ struct exec_ctx
     uint64_t pc, tb_vaddr, fallthrough, branch_target;
     std::string kind;
     std::string disas;
+    std::string symbol;
 };
 
 /**
@@ -104,30 +105,31 @@ static void log(unsigned int vcpu_index, void *udata)
 
     
 
-    debug("\n\nHEAD OF LOG\n");
     auto *ctx = static_cast<exec_ctx *>(udata);
-    if (!ctx || !scallopstate.g_out)
+    if (!ctx || !scallopstate.g_out) // If anything failed to initialize, ignore it
+
     {
         return;
     }
 
-    
     static int64_t startCode = qemu_plugin_start_code();
     static int64_t endCode = qemu_plugin_end_code();
-    if (ctx->pc >= startCode && ctx->pc < startCode + endCode)
-        ;
+    if (ctx->pc >= startCode && ctx->pc < startCode + endCode);
     else 
         return;
-        
-    
-    debug("entry code = %llx\n", qemu_plugin_start_code());
 
     //debug("rip = 0x%" PRIx64 "\n", ctx->pc);
     int written = 0;
     if (scallopstate.g_log_disas) {
-        written = fprintf(scallopstate.g_out, "0x%" PRIx64 ",%s,%s0x%" PRIx64 ",0x%" PRIx64 ",0x%" PRIx64 ",\"%s\"\n",
-                          ctx->pc, ctx->kind.c_str(), (ctx->branch_target ? "" : ""), ctx->branch_target ? ctx->branch_target : 0,
-                          ctx->fallthrough, ctx->tb_vaddr, ctx->disas.empty() ? "" : ctx->disas.c_str());
+        written = fprintf(scallopstate.g_out, "0x%" PRIx64 ",%s,%s0x%" PRIx64 ",0x%" PRIx64 ",0x%" PRIx64 ",\"%s\",\"%s\"\n",
+                          ctx->pc, 
+                          ctx->kind.c_str(), 
+                          (ctx->branch_target ? "" : ""), 
+                          ctx->branch_target ? ctx->branch_target : 0,
+                          ctx->fallthrough, 
+                          ctx->tb_vaddr, 
+                          ctx->disas.empty() ? "" : ctx->disas.c_str(),
+                          ctx->symbol.c_str());
     }
     else {
         written = fprintf(scallopstate.g_out, "0x%" PRIx64 ",%s,%s0x%" PRIx64 ",0x%" PRIx64 ",0x%" PRIx64 "\n",
@@ -187,6 +189,9 @@ void tb_trans_cb(qemu_plugin_id_t id, struct qemu_plugin_tb *tb)
         }
         uint64_t sz = insn_size_or_zero(insn);
         ctx->fallthrough = sz ? ctx->pc + sz : 0;
+
+        const char* sym = qemu_plugin_insn_symbol(insn);
+        ctx->symbol = sym ? sym : "";
 
         // Set an instruction callback
         qemu_plugin_register_vcpu_insn_exec_cb(insn, log, QEMU_PLUGIN_CB_RW_REGS, ctx);

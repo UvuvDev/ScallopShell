@@ -740,6 +740,7 @@ bool Emulator::getIsEmulating()
 {
     return isEmulating;
 }
+
 std::vector<InstructionInfo>* Emulator::getRunInstructions(
     int start_line,
     int n,
@@ -824,7 +825,7 @@ std::vector<InstructionInfo>* Emulator::getRunInstructions(
         if (s.empty()) continue;
 
         auto cols = parse_csv(s);
-        if (cols.size() < 5) continue;
+        if (cols.size() < 6) continue; // minimum columns when symbol is present
 
         const std::string& c0 = cols[0];
         if (c0.size() < 3 || !(c0[0] == '0' && (c0[1] == 'x' || c0[1] == 'X')))
@@ -840,7 +841,18 @@ std::vector<InstructionInfo>* Emulator::getRunInstructions(
             uint64_t bt = parse_hex(cols[2]);
             uint64_t ft = parse_hex(cols[3]);
 
-            std::string dis = (cols.size() >= 6) ? trim(cols[5]) : std::string{};
+            // CSV layout (when disassembly is enabled):
+            // pc,kind,branch_target,fallthrough,tb_vaddr,disas,symbol
+            // Disassembly column is optional, but symbol is always the last field.
+            std::string dis;
+            std::string symbol;
+            if (cols.size() >= 7) {
+                dis = trim(cols[5]);
+                symbol = trim(cols[6]);
+            } else {
+                dis.clear();
+                symbol = trim(cols.back());
+            }
 
             if (disType.empty()) {
                 // your fallback classify logic (unchanged)
@@ -858,7 +870,7 @@ std::vector<InstructionInfo>* Emulator::getRunInstructions(
                 else disType = "other";
             }
 
-            instructionInfo.emplace_back(std::move(dis), std::move(disType), pc, bt, ft, bt ? 1u : 0u);
+            instructionInfo.emplace_back(std::move(dis), std::move(disType), std::move(symbol), pc, bt, ft, bt ? 1u : 0u);
             ++returned;
         }
 

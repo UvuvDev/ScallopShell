@@ -35,6 +35,7 @@ enum class _EmulRetCode {
 struct InstructionInfo {
     std::string instruction;
     std::string instructionType;
+    std::string symbol;
     uint64_t address;
     uint64_t throughAddress;
     uint64_t fallThroughAddress;
@@ -42,6 +43,7 @@ struct InstructionInfo {
 
     InstructionInfo(std::string _instruction, 
         std::string _instructionType,
+        std::string _symbol,
         uint64_t _address,
         uint64_t _throughAddress,
         uint64_t _fallThroughAddress,
@@ -49,6 +51,7 @@ struct InstructionInfo {
 
             instruction = std::move(_instruction);
             instructionType = std::move(_instructionType);
+            symbol = std::move(_symbol);
             address = std::move(_address);
             throughAddress = std::move(_throughAddress);
             fallThroughAddress = std::move(_fallThroughAddress);

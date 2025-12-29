@@ -93,20 +93,27 @@ namespace ScallopUI {
                 lines.push_back(header);
 
                 for (int r = 0; r < instructionCount; r++) {
-                    auto e = text(hex8ByteStr(assemblyInstructions->at(r).address)) | color(Color::Magenta);
+                    Element left = text(hex8ByteStr(assemblyInstructions->at(r).address)) | color(Color::Magenta);
 
                     if (assemblyInstructions->at(r).instructionType == "other") 
-                        e = hbox({e, text(" - " + assemblyInstructions->at(r).instruction + "\n") | color(Color::CornflowerBlue)});
+                        left = hbox({left, text(" - " + assemblyInstructions->at(r).instruction + "\n") | color(Color::CornflowerBlue)});
                     else if (assemblyInstructions->at(r).instructionType == "jmp") 
-                        e = hbox({e, text(" - " + assemblyInstructions->at(r).instruction + "\n") | color(Color::Red1)});
+                        left = hbox({left, text(" - " + assemblyInstructions->at(r).instruction + "\n") | color(Color::Red1)});
                     else if (assemblyInstructions->at(r).instructionType == "call") 
-                        e = hbox({e, text(" - " + assemblyInstructions->at(r).instruction + "\n") | color(Color::Yellow1)});
+                        left = hbox({left, text(" - " + assemblyInstructions->at(r).instruction + "\n") | color(Color::Yellow1)});
                     else if (assemblyInstructions->at(r).instructionType == "cond") 
-                        e = hbox({e, text(" - " + assemblyInstructions->at(r).instruction + "\n") | color(Color::Orange1)});
+                        left = hbox({left, text(" - " + assemblyInstructions->at(r).instruction + "\n") | color(Color::Orange1)});
                     else if (assemblyInstructions->at(r).instructionType == "ret") 
-                        e = hbox({e, text(" - " + assemblyInstructions->at(r).instruction + "\n") | color(Color::MediumPurple1)});
-                        //e = hbox({e, text("     took branch -> " +  hex8ByteStr(assemblyInstructions->at(r).addrTaken)) | color(Color::Red1)});
-                    lines.emplace_back(e);
+                        left = hbox({left, text(" - " + assemblyInstructions->at(r).instruction + "\n") | color(Color::MediumPurple1)});
+                
+                    //Element mid = separator();
+
+                    // Print the symbol
+                    //Element right = hbox({filler(), text(" " +  assemblyInstructions->at(r).symbol) | color(Color::Magenta)}) |
+                                        size(WIDTH, EQUAL, 100);
+                    //lines.emplace_back(hbox({left, mid, right}));
+                    lines.emplace_back(hbox({left}));
+                
                 }
 
                 auto display = vbox(lines) | border | focus | reflect(renderedArea);
