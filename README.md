@@ -1,13 +1,17 @@
 
 # Scallop Shell - Disassembler, Debugger for Polymorphic code
 
-Newly rewritten, currently semi-functional pending development. IF YOU ARE LOOKING FOR A FUNCTIONAL VERSION GO TO 948639a AUG 18 2025  
-  
 <img width="520" height="520" alt="pixil-frame-0(2)" src="https://github.com/user-attachments/assets/499ccef4-afb0-4c02-888e-1045d65894cb" />
+
+Alpha 1.0.0  
+
+## Supported Platforms
+
+Linux, possibly macOS  
 
 ## Motivation
 
-GDB, pwndbg, Ghidra, IDA, are the current industry standards in reverse engineering. They are not well optimized for reverse engineering polymorphic binaries. The debuggers statically disassemble memory instead of displaying currently run instructions. They also aren't supported on Windows. The decompilers completely break once you involve polymorphic code.
+GDB, pwndbg, Ghidra, IDA, are the current industry standards in reverse engineering. They are not well optimized for reverse engineering polymorphic binaries. The debuggers statically disassemble memory instead of displaying currently run instructions. They also aren't supported on Windows, and the windows debuggers are mostly GUI based. The decompilers completely break once you involve polymorphic code.
 
 ## To compile from source 
 
@@ -47,3 +51,14 @@ You can take notes on the Notepad tab about what you're working on. Ctrl+S to sa
 You can run "step N", with N being the amount of instructions you want to step (this can be left blank for a default of 1). the "focus" command will filter out all memory outside of the low and high argument you specify (for example, "focus 0x400000 0x500000" will only output the instructions inside that range). Hitting enter will run the last command. 
 
 Scallop Shell shows you the instruction right before it runs. So if you want to patch anything before it runs it'll let you. 
+
+## Breakpoints 
+
+Break anywhere you want by putting "break 0x" , followed by the instruction to break at. 
+```
+break 0x400360
+```
+
+## Instruction filtering
+
+Currently, all instructions executed outside of the binary range are ignored. This leaves things like mmap() with executable memory unhandled by Scallop Shell. This will be fixed in a later version. 
