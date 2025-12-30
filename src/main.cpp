@@ -19,11 +19,16 @@
 
 using namespace ftxui;
 
-
-
-
-int main()
+int main(int argc, char** argv)
 {
+
+  CLI::App app{"Scallop Shell - Debugger"};
+  argv = app.ensure_utf8(argv);
+
+  std::string targetBinaryName = ".";
+  app.add_option("-f,--file", targetBinaryName, "Binary to debug")->required();
+
+  CLI11_PARSE(app, argc, argv);
 
   ScallopUI::initCliCommands();
 
@@ -39,7 +44,7 @@ int main()
   auto regs = ScallopUI::RegisterDisplay();
 
   Emulator emu;
-  int pid = emu.startEmulation("/home/bradley/Downloads/a.out");
+  int pid = emu.startEmulation(targetBinaryName);
   if (pid < 0) {
       std::cerr << "Failed to start QEMU\n";
   }

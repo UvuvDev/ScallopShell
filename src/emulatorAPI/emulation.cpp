@@ -25,6 +25,10 @@ bool Emulator::getIsEmulating()
 int Emulator::startEmulation(const std::string &executablePathArg)
 {
 
+    // If there's a child process of QEMU (true if reset), nuke it
+    if (child_pid_ != -1)
+        kill(child_pid_, SIGKILL); // Kill the child process
+
     // Find the QEMU binary to use on the target binary
     std::string qemuPath = ::getenv("SCALLOP_QEMU_BUILD") ? ::getenv("SCALLOP_QEMU_BUILD") : "";
     qemuPath += "/qemu-";
@@ -42,24 +46,8 @@ int Emulator::startEmulation(const std::string &executablePathArg)
     std::cout << pluginPath << std::endl;
     csvPath += "/branchPPPPlog.csv";
 
-    /*
-    OUT_TO_FILE(::getenv("ARCH") ? ::getenv("ARCH") : "<null>");
-    OUT_TO_FILE(" ");
-    OUT_TO_FILE(::getenv("SCALLOP_QEMU_BUILD") ? ::getenv("SCALLOP_QEMU_BUILD") : "<null>");
-    OUT_TO_FILE(" ");
-    OUT_TO_FILE(::getenv("SCALLOP_QEMU_PLUGIN") ? ::getenv("SCALLOP_QEMU_PLUGIN") : "<null>");
-
-    OUT_TO_FILE("\n\n");*/
-
     // Path to the executable being debugged
     static std::string executablePath = executablePathArg;
-
-    // If there's a child process of QEMU, nuke it
-    if (child_pid_ != -1)
-        kill(child_pid_, SIGKILL); // Kill the child process
-
-    // Clean up previous CSV; we can’t glob /tmp/branchlog.*.sock here, but that’s fine.
-    //::unlink(csvPath.c_str());
 
     // ---- build argv: qemu -d plugin -D <log> -plugin <.so> -- <target> ----
     std::vector<std::string> args_str = {
