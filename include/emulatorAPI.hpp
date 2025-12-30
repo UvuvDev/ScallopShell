@@ -8,6 +8,18 @@
 #include "functional"
 #include "atomic"
 #include "socket.hpp"
+#include <chrono>
+#include <thread>
+#include <vector>
+#include <string>
+#include <iostream>
+#include <fstream>
+#include <filesystem>
+#include <unordered_map>
+#include "debug.hpp"
+#include <bit>
+#include <mutex>
+#include <optional>
 
 /**
  * Enum with commands.
