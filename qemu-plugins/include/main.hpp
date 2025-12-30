@@ -28,6 +28,8 @@ extern "C" {
 #include <memory> 
 #include "filesystem"
 
+#include "symbols.hpp"
+
 extern uint64_t cur_pc;
 
 /**
@@ -114,6 +116,9 @@ private:
     GateManager gates; 
     
 public:
+    
+    static SymbolResolver g_resolver;    
+
     // File paths for output
     static char g_mem_path[256];
     static char g_reg_path[256];

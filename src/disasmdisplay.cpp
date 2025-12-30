@@ -106,13 +106,12 @@ namespace ScallopUI {
                     else if (assemblyInstructions->at(r).instructionType == "ret") 
                         left = hbox({left, text(" - " + assemblyInstructions->at(r).instruction + "\n") | color(Color::MediumPurple1)});
                 
-                    //Element mid = separator();
+                    Element mid = separator();
 
                     // Print the symbol
-                    //Element right = hbox({filler(), text(" " +  assemblyInstructions->at(r).symbol) | color(Color::Magenta)}) |
-                                        size(WIDTH, EQUAL, 100);
-                    //lines.emplace_back(hbox({left, mid, right}));
-                    lines.emplace_back(hbox({left}));
+                    Element right = hbox({filler(), text(" " +  assemblyInstructions->at(r).symbol) | color(Color::Magenta)});
+                    lines.emplace_back(hbox({left, mid, right}));
+                    //lines.emplace_back(hbox({left}));
                 
                 }
 

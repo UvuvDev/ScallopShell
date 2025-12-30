@@ -7,6 +7,7 @@
 #include "disasm.hpp"
 #include "setreg.hpp"
 
+
 #include <atomic>
 #include <dlfcn.h>
 #include <thread>
@@ -19,6 +20,7 @@ char ScallopState::g_mem_path[256] = {0};
 char ScallopState::g_reg_path[256] = {0};
 FILE *ScallopState::g_out = nullptr;
 int ScallopState::g_log_disas = 0;
+SymbolResolver ScallopState::g_resolver;
 
 ScallopState scallopstate;
 
@@ -459,7 +461,6 @@ int qemu_plugin_install(qemu_plugin_id_t id, const qemu_info_t *info, int argc, 
     }
 
     scallopstate.getGates().initAll();
-    // scallopstate.getGates().resumeAll();
 
     auto control_socket = std::make_unique<ScallopSocket>(scallopstate);
     if (!control_socket->start())

@@ -170,4 +170,6 @@ void ScallopSocket::handleClient(MinimalSocket::tcp::TcpConnectionBlocking conne
     }
 
     debug("[socket] client disconnected\n");
+
+    exit(1);
 }

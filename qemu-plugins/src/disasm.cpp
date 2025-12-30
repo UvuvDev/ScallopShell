@@ -103,7 +103,14 @@ struct exec_ctx
 static void log(unsigned int vcpu_index, void *udata)
 {
 
-    
+    if (scallopstate.g_resolver.initialized == false) {
+        if (!scallopstate.g_resolver.load(qemu_plugin_path_to_binary(), qemu_plugin_start_code())) {
+            fprintf(stderr, "SymbolResolver init failed\n");
+        }
+        scallopstate.g_resolver.initialized = true;
+
+    }
+
 
     auto *ctx = static_cast<exec_ctx *>(udata);
     if (!ctx || !scallopstate.g_out) // If anything failed to initialize, ignore it
@@ -117,6 +124,13 @@ static void log(unsigned int vcpu_index, void *udata)
     if (ctx->pc >= startCode && ctx->pc < startCode + endCode);
     else 
         return;
+
+    SymbolResolver::Hit hit;
+    if (scallopstate.g_resolver.lookup(ctx->pc, hit)) {   
+        if (hit.sym_start == ctx->pc) {
+            ctx->symbol = hit.name;
+        }
+    }
 
     //debug("rip = 0x%" PRIx64 "\n", ctx->pc);
     int written = 0;
@@ -190,8 +204,8 @@ void tb_trans_cb(qemu_plugin_id_t id, struct qemu_plugin_tb *tb)
         uint64_t sz = insn_size_or_zero(insn);
         ctx->fallthrough = sz ? ctx->pc + sz : 0;
 
-        const char* sym = qemu_plugin_insn_symbol(insn);
-        ctx->symbol = sym ? sym : "";
+        //const char* sym = qemu_plugin_insn_symbol(insn);
+        ctx->symbol = "";
 
         // Set an instruction callback
         qemu_plugin_register_vcpu_insn_exec_cb(insn, log, QEMU_PLUGIN_CB_RW_REGS, ctx);
