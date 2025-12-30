@@ -85,12 +85,6 @@ private:
 
     static std::atomic_uint64_t flags[MAX_VCPUS];
 
-    int start();
-
-    int terminateInstrument();
-
-    int processID();
-
 public:
 
     static int setFlag(int vcpu, vcpu_operation_t cmd);

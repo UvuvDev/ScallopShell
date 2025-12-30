@@ -43,13 +43,9 @@ int setMem() {
         return 1;
     }
 
-    // Set the size
-    //g_byte_array_set_size(buf, n);
-
-
     // Open memdump
-    const char *path = *scallopstate.g_mem_path ? scallopstate.g_mem_path : "/tmp/memdump.txt";
-    FILE *f = fopen(path, "r");
+    std::filesystem::path path = *scallopstate.g_mem_path ? scallopstate.g_mem_path : (std::filesystem::temp_directory_path() / "memdump.txt");
+    FILE *f = fopen(path.c_str(), "r");
     if (f)
     {   
         // Scan the whole file in byte by byte
@@ -64,18 +60,6 @@ int setMem() {
     {
         debug("Couldn't open \n");
     }    
-
-    // TEST
-    /*GByteArray *testBuf = g_byte_array_new();
-    std::string testVals = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    g_byte_array_append(testBuf, (const guint8*)testVals.c_str(), testVals.size());
-    debug("%26s %d %s %d\n", testBuf->data, testBuf->len, testVals.c_str(), testVals.size());
-    bool write_ok = qemu_plugin_write_memory_vaddr(address - testBuf->len, testBuf);
-    if (!write_ok)
-    {
-        debug(" set mem failed!!! %llx->%llx   :  %d \n", address, address - testBuf->len, testBuf->len);
-        return 1;
-    }*/
 
     // ---------
     // Write the memory

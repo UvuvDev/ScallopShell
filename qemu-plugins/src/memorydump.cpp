@@ -64,10 +64,6 @@ int memDump() {
 
     debug("memdump started\n");
 
-    //debug("vcpu index = %d: ", vcpu_current_thread_index );
-    //debug("flags = %llx\n", scallopstate.vcpu_op[vcpu_current_thread_index].flags.load(std::memory_order_relaxed));
-
-    
     // If the command isn't set to Dump Mem, exit. 
     if ( scallopstate.getIsFlagQueued(vcpu_current_thread_index, VCPU_OP_DUMP_MEM)) {
         debug("memdump not queued\n");
@@ -124,8 +120,8 @@ int memDump() {
     if (read_ok)
     {
         // Open the memdump file
-        const char *path = *scallopstate.g_mem_path ? scallopstate.g_mem_path : "/tmp/memdump.txt";
-        FILE *f = fopen(path, "w");
+        std::filesystem::path path = std::filesystem::temp_directory_path() / "memdump.txt";
+        FILE *f = fopen(path.c_str(), "w");
         if (f)
         {
             write_hex_dump(f, buf->data, buf->len);

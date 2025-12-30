@@ -26,6 +26,7 @@ extern "C" {
 #include <unistd.h>
 #include "functional"
 #include <memory> 
+#include "filesystem"
 
 extern uint64_t cur_pc;
 

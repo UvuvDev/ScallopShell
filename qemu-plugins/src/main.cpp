@@ -422,12 +422,16 @@ int qemu_plugin_install(qemu_plugin_id_t id, const qemu_info_t *info, int argc, 
         else if (!strncmp(argv[i], "regfile=", 8))
             snprintf(scallopstate.g_reg_path, sizeof(scallopstate.g_reg_path), "%s", argv[i] + 8);
     }
-    if (!*scallopstate.g_mem_path)
-        snprintf(scallopstate.g_mem_path, sizeof(scallopstate.g_mem_path), "/tmp/memdump.txt");
-    if (!*scallopstate.g_reg_path)
-        snprintf(scallopstate.g_reg_path, sizeof(scallopstate.g_reg_path), "/tmp/regdump.txt");
+    if (!*scallopstate.g_mem_path) {
+        std::filesystem::path path = std::filesystem::temp_directory_path() / "memdump.txt";
+        snprintf(scallopstate.g_mem_path, sizeof(scallopstate.g_mem_path), path.c_str());
+    }
+    if (!*scallopstate.g_reg_path) {
+        std::filesystem::path path = std::filesystem::temp_directory_path() / "regdump.txt";
+        snprintf(scallopstate.g_reg_path, sizeof(scallopstate.g_reg_path), path.c_str());
+    }
 
-    scallopstate.g_out = fopen("/tmp/branchlog.csv", "w+");
+    scallopstate.g_out = fopen( (std::filesystem::temp_directory_path() / "branchlog.csv").c_str(), "w+");
     if (!scallopstate.g_out)
     {
         fprintf(stderr, "[branchlog] failed to open '%s'\n", outfile);

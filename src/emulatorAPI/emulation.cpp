@@ -1,6 +1,11 @@
 #include "emulatorAPI.hpp"
 
-// POSIX
+#ifdef _WIN32
+
+#include "windows.h"
+
+#else
+
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -12,12 +17,14 @@
 #include <string.h>
 #include <bits/stdc++.h>
 
+#endif
+
 /* Variables and helpers */
 int child_pid_ = -1;
 bool Emulator::isEmulating = false;
 
 std::string pluginExtension() {
-    #ifdef WINDOWS 
+    #ifdef _WIN32 
         return ".dll";
     #else
         return ".so";
@@ -26,7 +33,7 @@ std::string pluginExtension() {
 }
 
 std::string executableExtension() {
-    #ifdef WINDOWS 
+    #ifdef _WIN32 
         return ".exe";
     #else
         return "";
@@ -39,28 +46,14 @@ bool Emulator::getIsEmulating()
     return isEmulating;
 }
 
-
-int Emulator::start() {
-
-}
-
-int Emulator::terminateInstrument() {
-
-}
-
-int Emulator::processID() {
-
-}
-
-
-
+#ifdef _WIN32
 int Emulator::startEmulation(const std::string &executablePathArg)
 {
-
-    // If there's a child process of QEMU (true if reset), nuke it
-    if (child_pid_ != -1)
-        kill(child_pid_, SIGKILL); // Kill the child process
-
+    return 1;
+}
+#else
+int Emulator::startEmulation(const std::string &executablePathArg)
+{
     // Find the QEMU binary to use on the target binary
     std::filesystem::path qemuPath = ::getenv("SCALLOP_QEMU_BUILD") ? ::getenv("SCALLOP_QEMU_BUILD") : "";
     qemuPath = qemuPath / "qemu-";
@@ -146,3 +139,4 @@ int Emulator::startEmulation(const std::string &executablePathArg)
 
     return child_pid_;
 }
+#endif

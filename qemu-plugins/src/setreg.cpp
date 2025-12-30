@@ -8,8 +8,8 @@ void writeReg()
 
     if (regs)
     {
-        const char *path = *scallopstate.g_reg_path ? scallopstate.g_reg_path : "/tmp/branchregs.txt";
-        FILE *f = fopen(path, "r");
+        std::filesystem::path path = *scallopstate.g_reg_path ? scallopstate.g_reg_path : (std::filesystem::temp_directory_path() / "regdump.txt");
+        FILE *f = fopen(path.c_str(), "r");
 
         // If the file was opened correctly
         if (f)

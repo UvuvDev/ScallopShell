@@ -18,8 +18,8 @@ int regDump()
     {
         //debug("got registers\n");
         
-        const char *path = *scallopstate.g_reg_path ? scallopstate.g_reg_path : "/tmp/branchregs.txt";
-        FILE *f = fopen(path, "w");
+        std::filesystem::path path = std::filesystem::temp_directory_path() / "regdump.txt";
+        FILE *f = fopen(path.c_str(), "w");
 
         if (f)
         {
