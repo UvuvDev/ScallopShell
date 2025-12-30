@@ -1,8 +1,6 @@
 #include "emulatorAPI.hpp"
 #include "guihelpers.hpp"
 
-static constexpr const char *kMemDump = "/tmp/memdump.txt";
-
 struct PendingSetMem {
     uint64_t address = 0;
     int size = 0;
@@ -32,19 +30,13 @@ static std::unordered_map<std::string, MemoryCache> &memoryCaches()
     return caches;
 }
  
-
-bool readWholeFile(const std::string &path, std::string &out)
-{
-    std::ifstream ifs(path, std::ios::in | std::ios::binary);
-    if (!ifs)
-        return false;
-    out.assign(std::istreambuf_iterator<char>(ifs), std::istreambuf_iterator<char>());
-    return true;
-}
-
 bool writeWholeFile(const std::string &path, const std::string &contents)
 {
-    std::ofstream ofs(path, std::ios::out | std::ios::binary | std::ios::trunc);
+    
+    static std::filesystem::path tempDir = std::filesystem::temp_directory_path();
+    tempDir = tempDir / path;
+    
+    std::ofstream ofs(tempDir, std::ios::out | std::ios::binary | std::ios::trunc);
     if (!ofs)
         return false;
     ofs.write(contents.data(), (std::streamsize)contents.size());
@@ -53,10 +45,15 @@ bool writeWholeFile(const std::string &path, const std::string &contents)
 
 bool writeWholeFile(const std::string &path, const uint8_t *data, int n)
 {
+
     if (!data || n <= 0)
         return false;
 
-    std::ofstream ofs(path, std::ios::out | std::ios::binary | std::ios::trunc);
+    static std::filesystem::path tempDir = std::filesystem::temp_directory_path();
+
+    tempDir = tempDir / path;
+
+    std::ofstream ofs(tempDir, std::ios::out | std::ios::binary | std::ios::trunc);
     if (!ofs)
         return false;
 
@@ -68,6 +65,7 @@ bool writeWholeFile(const std::string &path, const uint8_t *data, int n)
 std::vector<uint8_t>* Emulator::getMemory(uint64_t address, int n,
                                           int targetMods, const std::string &cacheKey)
 {
+
     auto &cache = memoryCaches()[cacheKey];
     const uint64_t kNoAddress = std::numeric_limits<uint64_t>::max();
 
@@ -103,8 +101,6 @@ std::vector<uint8_t>* Emulator::getMemory(uint64_t address, int n,
         return &cache.data;
     }
 
-    fprintf(stderr, "flag is queued, ready to get memory\n");
-
     // Decremement span because it's going to do another modification
     uint64_t span = static_cast<uint64_t>(cache.span - 1);
     uint64_t hi = cache.address;
@@ -118,23 +114,17 @@ std::vector<uint8_t>* Emulator::getMemory(uint64_t address, int n,
     std::snprintf(cmd, sizeof(cmd), "get memory 0x%llx %d\n",
                   (unsigned long long)cache.address, n);
 
-    fprintf(stderr, "%s\n", cmd);
 
     if (socket.sendCommand(cmd).compare(0, 2, "ok") != 0)
     {
         cache.tryUpdateAgain = true;
-        fprintf(stderr, "     trying again, didnt send ok back\n");
         return &cache.data;
     }
 
-    fprintf(stderr, "sent command\n");
-
-    std::ifstream memoryFile(kMemDump, std::ios::in);
+    static std::filesystem::path tempFilePath = std::filesystem::temp_directory_path();
+    std::ifstream memoryFile( tempFilePath / "memdump.txt", std::ios::in);
     if (!memoryFile.is_open())
     {
-
-        fprintf(stderr, "memory file is not open\n");
-
         cache.tryUpdateAgain = true;
         return &cache.data;
     }
@@ -245,7 +235,7 @@ int Emulator::modifyMemory(uint64_t address, std::vector<uint8_t>* data, int n) 
         memoryDumpWrite.back() = '\n';
 
     // If writing the whole file works
-    if (!writeWholeFile(kMemDump, memoryDumpWrite))
+    if (!writeWholeFile("memdump.txt", memoryDumpWrite))
         return 1;
 
     char cmd[128];

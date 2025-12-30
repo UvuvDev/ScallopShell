@@ -12,14 +12,46 @@
 #include <string.h>
 #include <bits/stdc++.h>
 
-
+/* Variables and helpers */
 int child_pid_ = -1;
 bool Emulator::isEmulating = false;
+
+std::string pluginExtension() {
+    #ifdef WINDOWS 
+        return ".dll";
+    #else
+        return ".so";
+    #endif
+
+}
+
+std::string executableExtension() {
+    #ifdef WINDOWS 
+        return ".exe";
+    #else
+        return "";
+    #endif
+
+}
 
 bool Emulator::getIsEmulating()
 {
     return isEmulating;
 }
+
+
+int Emulator::start() {
+
+}
+
+int Emulator::terminateInstrument() {
+
+}
+
+int Emulator::processID() {
+
+}
+
 
 
 int Emulator::startEmulation(const std::string &executablePathArg)
@@ -30,31 +62,30 @@ int Emulator::startEmulation(const std::string &executablePathArg)
         kill(child_pid_, SIGKILL); // Kill the child process
 
     // Find the QEMU binary to use on the target binary
-    std::string qemuPath = ::getenv("SCALLOP_QEMU_BUILD") ? ::getenv("SCALLOP_QEMU_BUILD") : "";
-    qemuPath += "/qemu-";
-    qemuPath += ::getenv("SYSTEM") ? "system-" : "";
-    qemuPath += ::getenv("ARCH") ? ::getenv("ARCH") : "x86_64";
+    std::filesystem::path qemuPath = ::getenv("SCALLOP_QEMU_BUILD") ? ::getenv("SCALLOP_QEMU_BUILD") : "";
+    qemuPath = qemuPath / "qemu-";
+    qemuPath += (::getenv("SYSTEM") ? "system-" : "");
+    qemuPath += (::getenv("ARCH") ? ::getenv("ARCH") : "x86_64");
+    qemuPath += (executableExtension());
 
-    // Outputs for QEMU
-    std::string currentWorkingDir = ::getenv("PWD") ? ::getenv("PWD") : "";
-    std::string qemuTraceLog = currentWorkingDir;
-    std::string pluginPath = ::getenv("SCALLOP_QEMU_PLUGIN") ? ::getenv("SCALLOP_QEMU_PLUGIN") : currentWorkingDir + "/qemu-plugins/";
-    std::string csvPath = "/tmp";
-    qemuTraceLog += "/qemu.log";
-    std::cout << pluginPath << std::endl;
-    pluginPath += "/scallop_plugin.so";
-    std::cout << pluginPath << std::endl;
-    csvPath += "/branchPPPPlog.csv";
+    // Outputs for QEMU Plugin
+    std::filesystem::path currentWorkingDir = std::filesystem::current_path();
+    std::filesystem::path qemuTraceLog = currentWorkingDir;
+    std::filesystem::path pluginPath = ::getenv("SCALLOP_QEMU_PLUGIN") ? ::getenv("SCALLOP_QEMU_PLUGIN") : currentWorkingDir / "qemu-plugins";
+    std::filesystem::path csvPath = std::filesystem::temp_directory_path() / "branchlog.csv";
+
+    qemuTraceLog = qemuTraceLog / "qemu.log";
+    pluginPath = pluginPath / ("scallop_plugin" + pluginExtension());
 
     // Path to the executable being debugged
     static std::string executablePath = executablePathArg;
 
     // ---- build argv: qemu -d plugin -D <log> -plugin <.so> -- <target> ----
     std::vector<std::string> args_str = {
-        qemuPath,
+        qemuPath.string(),
         "-d", "plugin",
-        "-D", qemuTraceLog,
-        "-plugin", pluginPath,
+        "-D", qemuTraceLog.string(),
+        "-plugin", pluginPath.string(),
         "--",
         executablePath};
 
@@ -64,13 +95,13 @@ int Emulator::startEmulation(const std::string &executablePathArg)
         executablePath = executablePathArg;
     }
 
+
     // Put everything in argv to prepare it for qemu
     std::vector<char *> argv;
     argv.reserve(args_str.size() + 1);
     for (auto &s : args_str)
     {
         argv.push_back(const_cast<char *>(s.c_str()));
-        OUT_TO_FILE(s + " ");
     }
     argv.push_back(nullptr);
 
@@ -94,10 +125,6 @@ int Emulator::startEmulation(const std::string &executablePathArg)
     }
     if (pid == 0)
     {
-
-        // redirect stdout/stderr to pipe write end
-        //::dup2(pipefd[1], STDOUT_FILENO);
-        //::dup2(pipefd[1], STDERR_FILENO);
         ::close(pipefd[0]);
         ::close(pipefd[1]);
         ::execv(argv[0], argv.data());

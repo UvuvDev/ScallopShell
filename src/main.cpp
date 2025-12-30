@@ -112,7 +112,7 @@ int main(int argc, char** argv)
 
   /*===============*/
   
-  int registerSize = 100;
+  int registerSize = 110;
 
   auto right_stack = Container::Vertical({
     regs,        // ensure DisasmDisplay() is focusable
@@ -171,7 +171,6 @@ int main(int argc, char** argv)
 
   // Show it full-screen
   screen.Loop(root);
-
 
   running = false;
   return 0;

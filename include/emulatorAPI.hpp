@@ -20,6 +20,9 @@
 #include <bit>
 #include <mutex>
 #include <optional>
+#include "filesystem"
+
+#include "main.hpp"
 
 /**
  * Enum with commands.
@@ -81,6 +84,12 @@ private:
     static PluginNetwork socket;
 
     static std::atomic_uint64_t flags[MAX_VCPUS];
+
+    int start();
+
+    int terminateInstrument();
+
+    int processID();
 
 public:
 

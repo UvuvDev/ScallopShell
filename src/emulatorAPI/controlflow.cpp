@@ -7,7 +7,7 @@ int Emulator::step(int steps)
         setFlag(0, VCPU_OP_SET_MEM);
         if (flushStagedMemoryWrite() != 0)
         {
-            fprintf(stderr, "[scallop] failed to stage memory write\n");
+            //fprintf(stderr, "[scallop] failed to stage memory write\n");
             removeFlag(0, VCPU_OP_SET_MEM);
         }
     }

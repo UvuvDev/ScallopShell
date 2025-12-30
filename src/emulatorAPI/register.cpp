@@ -1,7 +1,7 @@
 #include "emulatorAPI.hpp"
 #include "fstream"
 
-static constexpr const char *kRegDump = "/tmp/regdump.txt";
+std::filesystem::path kRegDump = std::filesystem::temp_directory_path() / "regdump.txt";
 
 std::vector<std::string> *Emulator::getRegisters()
 {
