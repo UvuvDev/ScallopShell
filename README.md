@@ -18,7 +18,7 @@ GDB, pwndbg, Ghidra, IDA, are the current industry standards in reverse engineer
 Build QEMU from source, make sure the TCG Plugin flags are set. Without this, the Linux native implementation will not work. Then, go to ~/.bashrc, 
 ```
 export SCALLOP_QEMU_BUILD= # Build path of QEMU
-export SCALLOP_QEMU_PLUGIN= # Optional
+export SCALLOP_QEMU_PLUGIN= # Plugin path for scallop_plugin.so
 export ARCH="x86_64" # Whatever the suffix of the QEMU binary is (qemu-riscv64 -> riscv64)
 ```
 ### To compile from source 
