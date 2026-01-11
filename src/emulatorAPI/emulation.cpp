@@ -52,13 +52,27 @@ int Emulator::startEmulation(const std::string &executablePathArg)
     return 1;
 }
 #else
-int Emulator::startEmulation(const std::string &executablePathArg)
+int Emulator::startEmulation(const std::string &executablePathArg, const std::string& arch, bool system)
 {
+    static std::string executablePath = executablePathArg; // Path to the executable being debugged
+    static std::string qemuArch = arch; // Architecture
+    static bool isSystem = system; // Is system emulation
+
+    // If there's a new binary then replace the executable path
+    if (executablePathArg != "")
+    {
+        executablePath = executablePathArg;
+    }
+    if (arch != "") {
+        qemuArch = arch;
+    }
+
+
     // Find the QEMU binary to use on the target binary
     std::filesystem::path qemuPath = ::getenv("SCALLOP_QEMU_BUILD") ? ::getenv("SCALLOP_QEMU_BUILD") : "";
     qemuPath = qemuPath / "qemu-";
     qemuPath += (::getenv("SYSTEM") ? "system-" : "");
-    qemuPath += (::getenv("ARCH") ? ::getenv("ARCH") : "x86_64");
+    qemuPath += qemuArch;
     qemuPath += (executableExtension());
 
     // Outputs for QEMU Plugin
@@ -68,11 +82,7 @@ int Emulator::startEmulation(const std::string &executablePathArg)
     std::filesystem::path csvPath = std::filesystem::temp_directory_path() / "branchlog.csv";
 
     qemuTraceLog = qemuTraceLog / "qemu.log";
-    pluginPath = pluginPath / ("scallop_plugin" + pluginExtension());
-
-    // Path to the executable being debugged
-    static std::string executablePath = executablePathArg;
-
+    
     // ---- build argv: qemu -d plugin -D <log> -plugin <.so> -- <target> ----
     std::vector<std::string> args_str = {
         qemuPath.string(),
@@ -81,13 +91,6 @@ int Emulator::startEmulation(const std::string &executablePathArg)
         "-plugin", pluginPath.string(),
         "--",
         executablePath};
-
-    // If there's a new binary then replace the executable path
-    if (executablePathArg != "")
-    {
-        executablePath = executablePathArg;
-    }
-
 
     // Put everything in argv to prepare it for qemu
     std::vector<char *> argv;

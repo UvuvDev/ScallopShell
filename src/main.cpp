@@ -26,7 +26,11 @@ int main(int argc, char** argv)
   argv = app.ensure_utf8(argv);
 
   std::string targetBinaryName = ".";
+  std::string arch = "x86_64";
+  bool system = false;
   app.add_option("-f,--file", targetBinaryName, "Binary to debug")->required();
+  app.add_option("-a,--arch", arch, "Target Architecture");
+  app.add_option("-s,--system", system, "Is system?");
 
   CLI11_PARSE(app, argc, argv);
 
@@ -44,7 +48,7 @@ int main(int argc, char** argv)
   auto regs = ScallopUI::RegisterDisplay();
 
   Emulator emu;
-  int pid = emu.startEmulation(targetBinaryName);
+  int pid = emu.startEmulation(targetBinaryName, arch);
   if (pid < 0) {
       std::cerr << "Failed to start QEMU\n";
   }

@@ -46,7 +46,7 @@ void focusMemory(uint64_t low, uint64_t high)  {
 }
 
 void resetEmulator() {
-    Emulator::startEmulation("");
+    Emulator::startEmulation("", "");
 }
 
 void runLastFunc() {
