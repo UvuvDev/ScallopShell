@@ -13,9 +13,17 @@ Linux, possibly macOS
 
 GDB, pwndbg, Ghidra, IDA, are the current industry standards in reverse engineering. They are not well optimized for reverse engineering polymorphic binaries. The debuggers statically disassemble memory instead of displaying currently run instructions. They also aren't supported on Windows, and the windows debuggers are mostly GUI based. The decompilers completely break once you involve polymorphic code.
 
-## To compile from source 
+## Installation
 
-First download the capstone package. WITHOUT THIS THIS WILL NOT FUNCTION. For me in Fedora, it'll be:
+Build QEMU from source, make sure the TCG Plugin flags are set. Without this, the Linux native implementation will not work. Then, go to ~/.bashrc, 
+```
+export SCALLOP_QEMU_BUILD= # Build path of QEMU
+export SCALLOP_QEMU_PLUGIN= # Optional
+export ARCH="x86_64" # Whatever the suffix of the QEMU binary is (qemu-riscv64 -> riscv64)
+```
+### To compile from source 
+
+Above instructions. Then download the capstone package. WITHOUT THIS THIS WILL NOT FUNCTION. For me in Fedora, it'll be:
 ```bash
 sudo dnf install capstone        # Just running the precompiled binary
 sudo dnf install capstone-devel  # Compiling from source
