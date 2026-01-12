@@ -163,7 +163,7 @@ std::vector<InstructionInfo>* Emulator::getRunInstructions(
         if (s.empty()) continue;
 
         auto cols = parse_csv(s);
-        if (cols.size() < 6) continue; // minimum columns when symbol is present
+        if (cols.size() < 7) continue; // minimum columns when symbol is present
 
         const std::string& c0 = cols[0];
         if (c0.size() < 3 || !(c0[0] == '0' && (c0[1] == 'x' || c0[1] == 'X')))
@@ -180,13 +180,13 @@ std::vector<InstructionInfo>* Emulator::getRunInstructions(
             uint64_t ft = parse_hex(cols[3]);
 
             // CSV layout (when disassembly is enabled):
-            // pc,kind,branch_target,fallthrough,tb_vaddr,disas,symbol
-            // Disassembly column is optional, but symbol is always the last field.
+            // pc,kind,branch_target,fallthrough,tb_vaddr,bytes,disas,symbol
+            // Disassembly column is optional, but bytes is always present.
             std::string dis;
             std::string symbol;
-            if (cols.size() >= 7) {
-                dis = trim(cols[5]);
-                symbol = trim(cols[6]);
+            if (cols.size() >= 8) {
+                dis = trim(cols[6]);
+                symbol = trim(cols[7]);
             } else {
                 dis.clear();
                 symbol = trim(cols.back());

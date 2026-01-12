@@ -71,7 +71,7 @@ int Emulator::startEmulation(const std::string &executablePathArg, const std::st
     // Find the QEMU binary to use on the target binary
     std::filesystem::path qemuPath = ::getenv("SCALLOP_QEMU_BUILD") ? ::getenv("SCALLOP_QEMU_BUILD") : "";
     qemuPath = qemuPath / "qemu-";
-    qemuPath += (::getenv("SYSTEM") ? "system-" : "");
+    qemuPath += (isSystem ? "system-" : "");
     qemuPath += qemuArch;
     qemuPath += (executableExtension());
 
@@ -82,7 +82,7 @@ int Emulator::startEmulation(const std::string &executablePathArg, const std::st
     std::filesystem::path csvPath = std::filesystem::temp_directory_path() / "branchlog.csv";
 
     qemuTraceLog = qemuTraceLog / "qemu.log";
-    
+
     // ---- build argv: qemu -d plugin -D <log> -plugin <.so> -- <target> ----
     std::vector<std::string> args_str = {
         qemuPath.string(),

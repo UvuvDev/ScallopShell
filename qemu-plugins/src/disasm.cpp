@@ -3,6 +3,7 @@
 #include <string.h>
 #include <errno.h>
 #include <fstream>
+#include <vector>
 #include "main.hpp"
 #include "debug.hpp"
 #include "memorydump.hpp"
@@ -29,6 +30,20 @@ static inline std::string safe_disas(struct qemu_plugin_insn *insn)
 static inline uint64_t insn_size_or_zero(struct qemu_plugin_insn *insn)
 {
     return qemu_plugin_insn_size(insn);
+}
+
+static std::string bytes_to_hex(const uint8_t *data, size_t len)
+{
+    static const char kHex[] = "0123456789abcdef";
+    std::string out;
+    out.reserve(len * 2);
+    for (size_t i = 0; i < len; ++i)
+    {
+        unsigned char b = data[i];
+        out.push_back(kHex[b >> 4]);
+        out.push_back(kHex[b & 0x0f]);
+    }
+    return out;
 }
 
 /**
@@ -93,6 +108,7 @@ struct exec_ctx
     std::string kind;
     std::string disas;
     std::string symbol;
+    std::vector<uint8_t> insn_bytes;
 };
 
 /**
@@ -133,22 +149,26 @@ static void log(unsigned int vcpu_index, void *udata)
     }
 
     //debug("rip = 0x%" PRIx64 "\n", ctx->pc);
+    std::string bytes_hex = ctx->insn_bytes.empty()
+                                ? ""
+                                : bytes_to_hex(ctx->insn_bytes.data(), ctx->insn_bytes.size());
     int written = 0;
     if (scallopstate.g_log_disas) {
-        written = fprintf(scallopstate.g_out, "0x%" PRIx64 ",%s,%s0x%" PRIx64 ",0x%" PRIx64 ",0x%" PRIx64 ",\"%s\",\"%s\"\n",
+        written = fprintf(scallopstate.g_out, "0x%" PRIx64 ",%s,%s0x%" PRIx64 ",0x%" PRIx64 ",0x%" PRIx64 ",\"%s\",\"%s\",\"%s\"\n",
                           ctx->pc, 
                           ctx->kind.c_str(), 
                           (ctx->branch_target ? "" : ""), 
                           ctx->branch_target ? ctx->branch_target : 0,
                           ctx->fallthrough, 
                           ctx->tb_vaddr, 
+                          bytes_hex.c_str(),
                           ctx->disas.empty() ? "" : ctx->disas.c_str(),
                           ctx->symbol.c_str());
     }
     else {
-        written = fprintf(scallopstate.g_out, "0x%" PRIx64 ",%s,%s0x%" PRIx64 ",0x%" PRIx64 ",0x%" PRIx64 "\n",
+        written = fprintf(scallopstate.g_out, "0x%" PRIx64 ",%s,%s0x%" PRIx64 ",0x%" PRIx64 ",0x%" PRIx64 ",\"%s\"\n",
                           ctx->pc, ctx->kind.c_str(), (ctx->branch_target ? "" : ""), ctx->branch_target ? ctx->branch_target : 0,
-                          ctx->fallthrough, ctx->tb_vaddr);
+                          ctx->fallthrough, ctx->tb_vaddr, bytes_hex.c_str());
     }
     if (written < 0)
     {
@@ -203,6 +223,16 @@ void tb_trans_cb(qemu_plugin_id_t id, struct qemu_plugin_tb *tb)
         }
         uint64_t sz = insn_size_or_zero(insn);
         ctx->fallthrough = sz ? ctx->pc + sz : 0;
+        ctx->insn_bytes.clear();
+        if (sz > 0)
+        {
+            ctx->insn_bytes.resize(sz);
+            size_t copied = qemu_plugin_insn_data(insn, ctx->insn_bytes.data(), ctx->insn_bytes.size());
+            if (copied < ctx->insn_bytes.size())
+            {
+                ctx->insn_bytes.resize(copied);
+            }
+        }
 
         //const char* sym = qemu_plugin_insn_symbol(insn);
         ctx->symbol = "";

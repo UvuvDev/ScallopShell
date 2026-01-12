@@ -450,7 +450,7 @@ int qemu_plugin_install(qemu_plugin_id_t id, const qemu_info_t *info, int argc, 
             outfile ? outfile : "(stderr)", scallopstate.g_mem_path, scallopstate.g_reg_path);
     fflush(stderr);
 
-    fprintf(scallopstate.g_out, "pc,kind,branch_target,fallthrough,tb_vaddr%s,symbol\n", scallopstate.g_log_disas ? ",disas" : "");
+    fprintf(scallopstate.g_out, "pc,kind,branch_target,fallthrough,tb_vaddr,bytes%s,symbol\n", scallopstate.g_log_disas ? ",disas" : "");
     fflush(scallopstate.g_out);
 
     Dl_info soinfo{};
