@@ -1,7 +1,13 @@
+#pragma once
 #include <stdio.h>
 #include "stdint.h"
 #include "vector"
 #include "string"
+#include <stdexcept>
+#include <cctype>
+#include "iostream"
+#include "filesystem"
+#include "fstream"
 
 struct instructionData {
     uint64_t pc;
