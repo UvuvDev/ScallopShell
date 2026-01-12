@@ -1,5 +1,7 @@
 #include "main.hpp"
 #include "csv.hpp"
+#include "filter.hpp"
+#include "unordered_map"
 
 int main() {
 
@@ -14,8 +16,17 @@ int main() {
         parseLine(csvLine, insns.back());
     }
 
+    std::unordered_map<uint64_t, int> insnLooping;
+
     for (auto i : insns) {
-        std::cout << (void*)i.pc << " | " << i.disassembly << std::endl; 
+        std::cout << (void*)i.pc << " | " << i.disassembly << std::endl;
+        
+        if (shouldBranch(i)) {
+            std::cout << "  |  " << std::endl;
+            std::cout << "  |  " << std::endl;
+            insnLooping[i.pc] += 1;
+        }
+    
     }
     
     return 0;

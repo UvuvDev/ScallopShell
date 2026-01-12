@@ -11,6 +11,7 @@
 
 struct instructionData {
     uint64_t pc;
+    std::string kind;
     uint64_t branchTarget;
     uint64_t fallthroughAddr;
     uint64_t translatedBlockBase;

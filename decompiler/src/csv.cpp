@@ -88,7 +88,7 @@ int parseLine(std::string csvLine, instructionData& insn) {
 
         // Expect at least:
         // 0 pc
-        // 1 kind (ignored)
+        // 1 kind
         // 2 branch_target
         // 3 fallthrough
         // 4 tb_vaddr
@@ -104,6 +104,7 @@ int parseLine(std::string csvLine, instructionData& insn) {
         insn.translatedBlockBase= std::stoull(fields[4], nullptr, 0);
 
         insn.bytes              = hex_to_bytes(fields[5]);
+        insn.kind               = fields[1];
         insn.disassembly        = fields[6];
         insn.symbol             = fields[7];
 
