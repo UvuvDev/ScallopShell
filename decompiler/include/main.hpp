@@ -19,3 +19,18 @@ struct instructionData {
     std::string disassembly;
     std::string symbol;
 };
+
+// Build a contiguous memory image from instruction bytes.
+// Sets base to the lowest pc and entry to the first instruction pc.
+std::vector<uint8_t> buildMemoryImage(
+    const std::vector<instructionData>& insns,
+    uint64_t& base,
+    uint64_t& entry,
+    uint8_t pad = 0xCC);
+
+// Writes a minimal ELF64 little-endian x86_64 executable with a single LOAD segment.
+bool writeElfX64LE(
+    const std::filesystem::path& outPath,
+    const std::vector<uint8_t>& image,
+    uint64_t base,
+    uint64_t entry);
