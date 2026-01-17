@@ -3,7 +3,7 @@
 
 <img width="520" height="520" alt="pixil-frame-0(2)" src="https://github.com/user-attachments/assets/499ccef4-afb0-4c02-888e-1045d65894cb" />
 
-Alpha 1.0.0  
+Alpha 1.0.1  
 
 ## Supported Platforms
 
@@ -13,13 +13,25 @@ Linux, possibly macOS
 
 GDB, pwndbg, Ghidra, IDA, are the current industry standards in reverse engineering. They are not well optimized for reverse engineering polymorphic binaries. The debuggers statically disassemble memory instead of displaying currently run instructions. They also aren't supported on Windows, and the windows debuggers are mostly GUI based. The decompilers completely break once you involve polymorphic code.
 
+## Usage
+
+```
+scallop [OPTIONS]
+
+
+OPTIONS:
+  -h,     --help              Print this help message and exit 
+  -f,     --file REQUIRED     Filepath to target binary
+  -a,     --arch TEXT         Target Architecture, whatever the suffix of the QEMU binary
+                                 is (qemu-riscv64 -> riscv64, qemu-aarch64 -> aarch64)
+  -s,     --system BOOLEAN    Is system? 
+```
 ## Installation
 
 Build QEMU from source, make sure the TCG Plugin flags are set. Without this, the Linux native implementation will not work. Then, go to ~/.bashrc, 
 ```
 export SCALLOP_QEMU_BUILD= # Build path of QEMU
 export SCALLOP_QEMU_PLUGIN= # Plugin path for scallop_plugin.so
-export ARCH="x86_64" # Whatever the suffix of the QEMU binary is (qemu-riscv64 -> riscv64)
 ```
 ### To compile from source 
 
@@ -70,3 +82,7 @@ break 0x400360
 ## Instruction filtering
 
 Currently, all instructions executed outside of the binary range are ignored. This leaves things like mmap() with executable memory unhandled by Scallop Shell. This will be fixed in a later version. 
+
+## Decompilation
+
+Currently very experimental. It reconstructs the binary from the runtime instruction dump at /tmp/branchlog.csv, only with the instructions that have been run. This *DOES NOT* work for self modifying binaries: it preserves the first instruction that is run at a certain address, making this completely useless until it's supported. For now, please use standard reverse engineering workflows. Development on the decompiler is dynamic, and constant changes will occur until it is at a working stage.
