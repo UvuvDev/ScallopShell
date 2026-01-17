@@ -3,7 +3,7 @@
 
 <img width="520" height="520" alt="pixil-frame-0(2)" src="https://github.com/user-attachments/assets/499ccef4-afb0-4c02-888e-1045d65894cb" />
 
-Alpha 1.0.0  
+Alpha 1.0.1  
 
 ## Supported Platforms
 
@@ -70,3 +70,7 @@ break 0x400360
 ## Instruction filtering
 
 Currently, all instructions executed outside of the binary range are ignored. This leaves things like mmap() with executable memory unhandled by Scallop Shell. This will be fixed in a later version. 
+
+## Decompilation
+
+Currently very experimental. It reconstructs the binary from the runtime instruction dump at /tmp/branchlog.csv, only with the instructions that have been run. This *DOES NOT* work for self modifying binaries: it preserves the first instruction that is run at a certain address, making this completely useless until it's supported. For now, please use standard reverse engineering workflows. Development on the decompiler is dynamic, and constant changes will occur until it is at a working stage.
