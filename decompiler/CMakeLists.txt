@@ -32,13 +32,15 @@ endif()
 # --- Sources ---
 file(GLOB_RECURSE SCALLOP_DECOMP_SOURCES
      CONFIGURE_DEPENDS
-     "${CMAKE_SOURCE_DIR}/src/*.cpp")
+     "${CMAKE_SOURCE_DIR}/src/*.cpp"
+     "${CMAKE_SOURCE_DIR}/src/decompilerAPI/*.cpp")
 
 add_executable(scallop_decomp ${SCALLOP_DECOMP_SOURCES})
 
 # --- Includes ---
 target_include_directories(scallop_decomp PRIVATE
   ${CMAKE_SOURCE_DIR}/include
+  ${CMAKE_SOURCE_DIR}/include/decompilerAPI
 )
 
 # --- Capstone ---

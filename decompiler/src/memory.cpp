@@ -27,14 +27,16 @@ std::vector<uint8_t> buildMemoryImage(
             continue;
 
         auto inserted = by_pc.emplace(insn.pc, insn.bytes);
-        if (!inserted.second) {
+        if (!inserted.second) { // Is already previously inserted?
             // Keep the first occurrence to preserve original ordering semantics.
             continue;
         }
 
+        // Set the lowest bound of the PC
         if (insn.pc < min_pc)
             min_pc = insn.pc;
 
+        // Minimum PC + Total Size = End PC
         const uint64_t end = insn.pc + static_cast<uint64_t>(insn.bytes.size());
         if (end > max_end)
             max_end = end;
@@ -47,8 +49,10 @@ std::vector<uint8_t> buildMemoryImage(
 
     base = min_pc;
     const uint64_t size = max_end - min_pc;
+    std::cout << size << std::endl;
     std::vector<uint8_t> image(static_cast<size_t>(size), pad);
 
+    // Build the memory image
     for (const auto& kv : by_pc) {
         const uint64_t pc = kv.first;
         const auto& bytes = kv.second;
@@ -59,4 +63,4 @@ std::vector<uint8_t> buildMemoryImage(
     }
 
     return image;
-}
+} 
