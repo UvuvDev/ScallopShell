@@ -13,13 +13,25 @@ Linux, possibly macOS
 
 GDB, pwndbg, Ghidra, IDA, are the current industry standards in reverse engineering. They are not well optimized for reverse engineering polymorphic binaries. The debuggers statically disassemble memory instead of displaying currently run instructions. They also aren't supported on Windows, and the windows debuggers are mostly GUI based. The decompilers completely break once you involve polymorphic code.
 
+## Usage
+
+```
+scallop [OPTIONS]
+
+
+OPTIONS:
+  -h,     --help              Print this help message and exit 
+  -f,     --file REQUIRED     Filepath to target binary
+  -a,     --arch TEXT         Target Architecture, whatever the suffix of the QEMU binary
+                                 is (qemu-riscv64 -> riscv64, qemu-aarch64 -> aarch64)
+  -s,     --system BOOLEAN    Is system? 
+```
 ## Installation
 
 Build QEMU from source, make sure the TCG Plugin flags are set. Without this, the Linux native implementation will not work. Then, go to ~/.bashrc, 
 ```
 export SCALLOP_QEMU_BUILD= # Build path of QEMU
 export SCALLOP_QEMU_PLUGIN= # Plugin path for scallop_plugin.so
-export ARCH="x86_64" # Whatever the suffix of the QEMU binary is (qemu-riscv64 -> riscv64)
 ```
 ### To compile from source 
 
