@@ -46,12 +46,16 @@ int main() {
     
     uint64_t base = 0;
     uint64_t entry = 0;
-    auto image = buildMemoryImage(insns, base, entry, 0xCC, targetTriple);
+    uint64_t dataStart = 0;
+    uint64_t dataEnd = 0;
+    std::vector<ElfSymbol> symbols;
+    auto image = buildMemoryImage(insns, base, entry, 0x90, targetTriple,
+                                  &dataStart, &dataEnd, &symbols);
 
     std::cout << "Built memory image" << std::endl;
     if (!image.empty()) {
         std::filesystem::path outPath = std::filesystem::temp_directory_path() / "scallop";
-        if (writeElfX64LE(outPath, image, base, entry)) {
+        if (writeElfX64LE(outPath, image, base, entry, dataStart, dataEnd, &symbols)) {
             std::cout << "Wrote ELF to " << outPath << " (base=0x"
                       << std::hex << base << ", entry=0x" << entry << ")" << std::dec << std::endl;
 

@@ -8,6 +8,6 @@
 // to the chosen variant using an indirect call.
 std::vector<uint8_t> emitSwitcherStub(
     const std::string& targetTriple,
+    uint64_t stubAddr,
     uint64_t counterAddr,
-    uint64_t tableAddr,
-    uint64_t variantCount);
+    const std::vector<uint64_t>& variantAddrs);

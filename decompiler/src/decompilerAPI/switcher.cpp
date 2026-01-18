@@ -5,6 +5,7 @@
 
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/InlineAsm.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Support/CodeGen.h"
@@ -19,6 +20,7 @@
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Object/ObjectFile.h"
 #include "llvm/Object/ELFObjectFile.h"
+#include <climits>
 #include <cstdint>
 #include <fstream>
 #include <string>
@@ -57,7 +59,7 @@ std::vector<uint8_t> extractFunctionBytesFromFile(const std::string& path,
             }
             symAddr = *addrOrErr;
 
-            if (auto* elfObj = llvm::dyn_cast<llvm::object::ELFObjectFileBase>(obj)) {
+            if (llvm::isa<llvm::object::ELFObjectFileBase>(obj)) {
                 llvm::object::ELFSymbolRef elfSym(sym);
                 symSize = elfSym.getSize();
             } else {
@@ -103,9 +105,70 @@ std::vector<uint8_t> extractFunctionBytesFromFile(const std::string& path,
 
 std::vector<uint8_t> emitSwitcherStub(
     const std::string& targetTriple,
+    uint64_t stubAddr,
     uint64_t counterAddr,
-    uint64_t tableAddr,
-    uint64_t variantCount) {
+    const std::vector<uint64_t>& variantAddrs) {
+    if (targetTriple.rfind("x86_64", 0) == 0) {
+        std::vector<uint8_t> bytes;
+        auto emit8 = [&](uint8_t b) { bytes.push_back(b); };
+        auto emit32 = [&](uint32_t v) {
+            bytes.push_back(static_cast<uint8_t>(v & 0xFF));
+            bytes.push_back(static_cast<uint8_t>((v >> 8) & 0xFF));
+            bytes.push_back(static_cast<uint8_t>((v >> 16) & 0xFF));
+            bytes.push_back(static_cast<uint8_t>((v >> 24) & 0xFF));
+        };
+        auto emit64 = [&](uint64_t v) {
+            emit32(static_cast<uint32_t>(v & 0xFFFFFFFFu));
+            emit32(static_cast<uint32_t>((v >> 32) & 0xFFFFFFFFu));
+        };
+
+        // mov rax, imm64
+        emit8(0x48); emit8(0xB8); emit64(counterAddr);
+        // mov rcx, [rax]
+        emit8(0x48); emit8(0x8B); emit8(0x08);
+        // lea rdx, [rcx+1]
+        emit8(0x48); emit8(0x8D); emit8(0x51); emit8(0x01);
+        // mov [rax], rdx
+        emit8(0x48); emit8(0x89); emit8(0x10);
+
+        // Compare chain against rcx (counter before increment).
+        struct Patch { size_t at; uint64_t target; };
+        std::vector<Patch> patches;
+
+        for (size_t i = 0; i + 1 < variantAddrs.size(); ++i) {
+            // cmp rcx, imm32
+            emit8(0x48); emit8(0x81); emit8(0xF9);
+            emit32(static_cast<uint32_t>(i));
+            // je rel32
+            emit8(0x0F); emit8(0x84);
+            patches.push_back(Patch{bytes.size(), variantAddrs[i]});
+            emit32(0);
+        }
+
+        // jmp rel32 (default to last variant)
+        emit8(0xE9);
+        patches.push_back(Patch{bytes.size(), variantAddrs.back()});
+        emit32(0);
+
+        auto writeRel32 = [&](size_t at, uint64_t target) {
+            const int64_t rel = static_cast<int64_t>(target) -
+                                static_cast<int64_t>(stubAddr + at + 4);
+            if (rel < INT32_MIN || rel > INT32_MAX) {
+                throw std::runtime_error("rel32 out of range for switcher stub");
+            }
+            const uint32_t rel32 = static_cast<uint32_t>(rel);
+            bytes[at + 0] = static_cast<uint8_t>(rel32 & 0xFF);
+            bytes[at + 1] = static_cast<uint8_t>((rel32 >> 8) & 0xFF);
+            bytes[at + 2] = static_cast<uint8_t>((rel32 >> 16) & 0xFF);
+            bytes[at + 3] = static_cast<uint8_t>((rel32 >> 24) & 0xFF);
+        };
+
+        for (const auto& patch : patches) {
+            writeRel32(patch.at, patch.target);
+        }
+
+        return bytes;
+    }
     llvm::InitializeAllTargets();
     llvm::InitializeAllTargetMCs();
     llvm::InitializeAllAsmPrinters();
@@ -144,26 +207,46 @@ std::vector<uint8_t> emitSwitcherStub(
 
     llvm::Value* counterPtr = builder.CreateIntToPtr(
         builder.getInt64(counterAddr), i64ptr, "counter_ptr");
-    llvm::Value* tablePtr = builder.CreateIntToPtr(
-        builder.getInt64(tableAddr), i64ptr, "table_ptr");
-    llvm::Value* countVal = builder.getInt64(variantCount);
+    const bool isX64 = targetTriple.rfind("x86_64", 0) == 0;
 
     llvm::Value* idx = builder.CreateLoad(i64, counterPtr, "idx");
     llvm::Value* next = builder.CreateAdd(idx, builder.getInt64(1), "next");
     builder.CreateStore(next, counterPtr);
 
-    llvm::Value* last = builder.CreateSub(countVal, builder.getInt64(1), "last");
-    llvm::Value* clamp = builder.CreateICmpUGE(idx, last, "clamp");
-    llvm::Value* sel = builder.CreateSelect(clamp, last, idx, "sel");
+    std::vector<llvm::BasicBlock*> caseBlocks;
+    caseBlocks.reserve(variantAddrs.size());
+    for (size_t i = 0; i < variantAddrs.size(); ++i) {
+        caseBlocks.push_back(llvm::BasicBlock::Create(context, "case", fn));
+    }
 
-    llvm::Value* slot = builder.CreateInBoundsGEP(i64, tablePtr, sel, "slot");
-    llvm::Value* targetVal = builder.CreateLoad(i64, slot, "target");
+    llvm::BasicBlock* defaultBlock = caseBlocks.back();
+    llvm::BasicBlock* cur = entry;
+    for (size_t i = 0; i + 1 < variantAddrs.size(); ++i) {
+        llvm::Value* cmp = builder.CreateICmpEQ(idx, builder.getInt64(i));
+        llvm::BasicBlock* next = llvm::BasicBlock::Create(context, "chk", fn);
+        builder.CreateCondBr(cmp, caseBlocks[i], next);
+        builder.SetInsertPoint(next);
+        cur = next;
+    }
+    builder.CreateBr(defaultBlock);
+
     auto* calleeTy = llvm::FunctionType::get(voidTy, {}, false);
-    llvm::Value* calleePtr = builder.CreateIntToPtr(
-        targetVal, llvm::PointerType::getUnqual(calleeTy), "callee");
-    auto* call = builder.CreateCall(calleeTy, calleePtr, {});
-    call->setTailCallKind(llvm::CallInst::TCK_Tail);
-    builder.CreateRetVoid();
+    for (size_t i = 0; i < variantAddrs.size(); ++i) {
+        builder.SetInsertPoint(caseBlocks[i]);
+        if (isX64) {
+            auto* asmTy = llvm::FunctionType::get(voidTy, {i64}, false);
+            auto* jmpAsm = llvm::InlineAsm::get(asmTy, "jmp *$0", "r", true);
+            builder.CreateCall(jmpAsm, {builder.getInt64(variantAddrs[i])});
+            builder.CreateUnreachable();
+        } else {
+            llvm::Value* calleePtr = builder.CreateIntToPtr(
+                builder.getInt64(variantAddrs[i]),
+                llvm::PointerType::getUnqual(calleeTy), "callee");
+            auto* call = builder.CreateCall(calleeTy, calleePtr, {});
+            call->setTailCallKind(llvm::CallInst::TCK_Tail);
+            builder.CreateRetVoid();
+        }
+    }
 
     llvm::SmallString<128> tempPath;
     int fd = -1;

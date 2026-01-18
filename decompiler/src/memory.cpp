@@ -9,7 +9,10 @@ std::vector<uint8_t> buildMemoryImage(
     uint64_t& base,
     uint64_t& entry,
     uint8_t pad,
-    const std::string& targetTriple) {
+    const std::string& targetTriple,
+    uint64_t* dataStart,
+    uint64_t* dataEnd,
+    std::vector<ElfSymbol>* symbols) {
     base = 0;
     entry = 0;
 
@@ -99,7 +102,6 @@ std::vector<uint8_t> buildMemoryImage(
         uint64_t pc;
         std::vector<uint64_t> variant_addrs;
         uint64_t counter_addr = 0;
-        uint64_t table_addr = 0;
         std::vector<uint8_t> stub_bytes;
     };
 
@@ -115,7 +117,7 @@ std::vector<uint8_t> buildMemoryImage(
         SwitcherLayout layout;
         layout.pc = group.pc;
         for (const auto& variant : group.variants) {
-            std::cout << "PC = " << (void*)layout.pc << "  Counter Addr " << (void*)layout.counter_addr << "   Table Addr" << (void*)layout.table_addr << "   " << std::endl;
+            std::cout << "PC = " << (void*)layout.pc << "  Counter Addr " << (void*)layout.counter_addr << "   " << std::endl;
             for (auto& j : layout.variant_addrs) {
                 std::cout << (void*)j;
             }
@@ -135,22 +137,19 @@ std::vector<uint8_t> buildMemoryImage(
         switchers[i].counter_addr = counters_base + i * 8;
     }
 
-    uint64_t tables_base = alignUp(counters_base + switchers.size() * 8, 8);
-    uint64_t table_cursor = tables_base;
-    for (auto& sw : switchers) {
-        sw.table_addr = table_cursor;
-        table_cursor += sw.variant_addrs.size() * 8;
-    }
-
-    const uint64_t final_end = table_cursor;
+    const uint64_t final_end = counters_base + switchers.size() * 8;
+    if (dataStart)
+        *dataStart = counters_base;
+    if (dataEnd)
+        *dataEnd = final_end;
     const uint64_t size = final_end - min_pc;
     std::cout << size << std::endl;
     std::vector<uint8_t> image(static_cast<size_t>(size), pad);
     std::vector<uint8_t> occupied(static_cast<size_t>(original_size), 0);
 
     for (auto& sw : switchers) {
-        sw.stub_bytes = emitSwitcherStub(targetTriple, sw.counter_addr, sw.table_addr,
-                                         sw.variant_addrs.size());
+        sw.stub_bytes = emitSwitcherStub(targetTriple, sw.pc, sw.counter_addr,
+                                         sw.variant_addrs);
         const uint64_t off = sw.pc - min_pc;
         if (off + sw.stub_bytes.size() > image.size())
             continue;
@@ -202,15 +201,41 @@ std::vector<uint8_t> buildMemoryImage(
                 image[static_cast<size_t>(counter_off + i)] = 0;
             }
         }
-        const uint64_t table_off = sw.table_addr - min_pc;
-        for (size_t i = 0; i < sw.variant_addrs.size(); ++i) {
-            const uint64_t entry_off = table_off + i * 8;
-            if (entry_off + 8 > image.size())
+    }
+
+    if (symbols) {
+        symbols->clear();
+        for (const auto& sw : switchers) {
+            ElfSymbol sym{};
+            sym.name = "switcher_" + std::to_string(sw.pc);
+            sym.addr = sw.pc;
+            sym.size = sw.stub_bytes.size();
+            sym.isData = false;
+            symbols->push_back(sym);
+
+            ElfSymbol counter{};
+            counter.name = "switcher_counter_" + std::to_string(sw.pc);
+            counter.addr = sw.counter_addr;
+            counter.size = 8;
+            counter.isData = true;
+            symbols->push_back(counter);
+
+        }
+
+        for (size_t gi = 0, si = 0; gi < groups.size(); ++gi) {
+            const auto& group = groups[gi];
+            if (group.variants.size() <= 1)
                 continue;
-            const uint64_t addr = sw.variant_addrs[i];
-            for (size_t b = 0; b < 8; ++b) {
-                image[static_cast<size_t>(entry_off + b)] =
-                    static_cast<uint8_t>((addr >> (8 * b)) & 0xFF);
+            const auto& sw = switchers[si++];
+            for (size_t vi = 0; vi < group.variants.size(); ++vi) {
+                const auto& chunk = group.variants[vi];
+                ElfSymbol sym{};
+                sym.name = "variant_" + std::to_string(group.pc) + "_" +
+                           std::to_string(vi);
+                sym.addr = sw.variant_addrs[vi];
+                sym.size = chunk.bytes.size();
+                sym.isData = false;
+                symbols->push_back(sym);
             }
         }
     }
