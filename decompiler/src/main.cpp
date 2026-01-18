@@ -9,6 +9,16 @@ int main() {
 
     std::vector<instructionData> insns;
 
+    std::filesystem::path fileInfoPath = std::filesystem::path("/tmp") / "scallop_file_info";
+    std::string targetTriple;
+    try {
+        targetTriple = readTargetTriple(fileInfoPath);
+        std::cout << "Target triple: " << targetTriple << std::endl;
+    } catch (const std::exception& ex) {
+        std::cerr << ex.what() << std::endl;
+        return 1;
+    }
+
     std::filesystem::path branchlogPath = std::filesystem::temp_directory_path() / "branchlog.csv";
 
     std::ifstream branchlog(branchlogPath);

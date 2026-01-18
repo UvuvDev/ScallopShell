@@ -8,6 +8,7 @@
 #include "iostream"
 #include "filesystem"
 #include "fstream"
+#include "string"
 
 struct instructionData {
     uint64_t pc;
@@ -34,3 +35,7 @@ bool writeElfX64LE(
     const std::vector<uint8_t>& image,
     uint64_t base,
     uint64_t entry);
+
+// Reads target triple from a key=value file at infoPath.
+// Expected key: target_triple
+std::string readTargetTriple(const std::filesystem::path& infoPath);

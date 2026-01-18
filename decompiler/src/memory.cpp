@@ -11,7 +11,7 @@ std::vector<uint8_t> buildMemoryImage(
     entry = 0;
 
     if (insns.empty()) {
-        return {};
+        return {}; 
     }
 
     // First PC is the entry point (caller requested).
