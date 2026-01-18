@@ -10,6 +10,15 @@ int main() {
     std::vector<instructionData> insns;
 
     std::filesystem::path fileInfoPath = std::filesystem::path("/tmp") / "scallop_file_info";
+    if (!std::filesystem::exists(fileInfoPath)) {
+        std::filesystem::path defaultElf =
+            std::filesystem::path(std::getenv("HOME")) / "Downloads" / "checkpass";
+        if (!writeTargetTripleFromElf(defaultElf, fileInfoPath)) {
+            std::cerr << "Failed to create " << fileInfoPath << std::endl;
+            return 1;
+        }
+    }
+
     std::string targetTriple;
     try {
         targetTriple = readTargetTriple(fileInfoPath);
@@ -37,7 +46,7 @@ int main() {
     
     uint64_t base = 0;
     uint64_t entry = 0;
-    auto image = buildMemoryImage(insns, base, entry, 0xCC);
+    auto image = buildMemoryImage(insns, base, entry, 0xCC, targetTriple);
 
     std::cout << "Built memory image" << std::endl;
     if (!image.empty()) {

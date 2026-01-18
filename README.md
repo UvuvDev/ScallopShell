@@ -40,6 +40,10 @@ Above instructions. Then download the capstone package. WITHOUT THIS THIS WILL N
 sudo dnf install capstone        # Just running the precompiled binary
 sudo dnf install capstone-devel  # Compiling from source
 ```
+For the decompiler, run:
+```bash
+sudo dnf install llvm-devel
+```
 But your specific install command may vary, check the documentation for YOUR OS / Distro. 
 
 Then, run in the main project directory:

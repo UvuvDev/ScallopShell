@@ -27,7 +27,8 @@ std::vector<uint8_t> buildMemoryImage(
     const std::vector<instructionData>& insns,
     uint64_t& base,
     uint64_t& entry,
-    uint8_t pad = 0xCC);
+    uint8_t pad = 0xCC,
+    const std::string& targetTriple = "");
 
 // Writes a minimal ELF64 little-endian x86_64 executable with a single LOAD segment.
 bool writeElfX64LE(
@@ -39,3 +40,9 @@ bool writeElfX64LE(
 // Reads target triple from a key=value file at infoPath.
 // Expected key: target_triple
 std::string readTargetTriple(const std::filesystem::path& infoPath);
+
+// Infers the target triple from an ELF file and writes it to infoPath.
+// Returns true on success.
+bool writeTargetTripleFromElf(
+    const std::filesystem::path& elfPath,
+    const std::filesystem::path& infoPath);
