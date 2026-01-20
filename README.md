@@ -90,3 +90,29 @@ Currently, all instructions executed outside of the binary range are ignored. Th
 ## Decompilation
 
 Currently very experimental. It reconstructs the binary from the runtime instruction dump at /tmp/branchlog.csv, only with the instructions that have been run. This *DOES NOT* work for self modifying binaries: it preserves the first instruction that is run at a certain address, making this completely useless until it's supported. For now, please use standard reverse engineering workflows. Development on the decompiler is dynamic, and constant changes will occur until it is at a working stage.
+
+## License
+
+This project is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0).
+
+You are free to use, modify, and distribute this software.
+If you offer it as a service or redistribute modified versions,
+you must make the full source code available under the same license.
+
+Commercial relicensing may be available in the future.
+
+## Trademark
+
+The project name and logo are trademarks of Bradley Reece Fernandez.
+Use of the name or logo in commercial offerings requires explicit permission.
+This project is not affiliated with, endorsed by, or sponsored by any company unless explicitly stated.
+
+## No Endorsement
+
+Use of this software does not imply endorsement by the author.
+
+## Contributing
+
+By contributing to this project, you agree to the Contributor License Agreement (CLA).
+The CLA allows the maintainer to relicense contributions while contributors retain
+copyright to their work.
