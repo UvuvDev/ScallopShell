@@ -3,6 +3,87 @@
 #include <algorithm>
 #include <unordered_map>
 #include <stdexcept>
+#include <capstone/capstone.h>
+
+namespace {
+std::vector<uint8_t> relocateX64Chunk(const std::vector<uint8_t>& bytes,
+                                      uint64_t oldBase,
+                                      uint64_t newBase) {
+    if (bytes.empty() || oldBase == newBase)
+        return bytes;
+
+    csh handle;
+    if (cs_open(CS_ARCH_X86, CS_MODE_64, &handle) != CS_ERR_OK) {
+        throw std::runtime_error("Capstone init failed for x86_64 relocation");
+    }
+    cs_option(handle, CS_OPT_DETAIL, CS_OPT_ON);
+
+    std::vector<uint8_t> out = bytes;
+    cs_insn* insn = nullptr;
+    size_t count = cs_disasm(handle, bytes.data(), bytes.size(), oldBase, 0, &insn);
+    if (count == 0) {
+        cs_close(&handle);
+        throw std::runtime_error("Capstone disasm failed for relocation");
+    }
+
+    auto patchDisp = [&](size_t off, size_t size, int64_t value) {
+        if (size == 1) {
+            if (value < INT8_MIN || value > INT8_MAX) {
+                throw std::runtime_error("rel8 out of range for relocation");
+            }
+            out[off] = static_cast<uint8_t>(value & 0xFF);
+        } else if (size == 4) {
+            if (value < INT32_MIN || value > INT32_MAX) {
+                throw std::runtime_error("rel32 out of range for relocation");
+            }
+            const uint32_t v = static_cast<uint32_t>(value);
+            out[off + 0] = static_cast<uint8_t>(v & 0xFF);
+            out[off + 1] = static_cast<uint8_t>((v >> 8) & 0xFF);
+            out[off + 2] = static_cast<uint8_t>((v >> 16) & 0xFF);
+            out[off + 3] = static_cast<uint8_t>((v >> 24) & 0xFF);
+        }
+    };
+
+    for (size_t i = 0; i < count; ++i) {
+        const cs_insn& ci = insn[i];
+        if (!ci.detail)
+            continue;
+
+        const cs_x86& x86 = ci.detail->x86;
+        const uint64_t oldAddr = ci.address;
+        const uint64_t newAddr = newBase + (oldAddr - oldBase);
+
+        if ((cs_insn_group(handle, &ci, CS_GRP_JUMP) ||
+             cs_insn_group(handle, &ci, CS_GRP_CALL)) &&
+            x86.op_count > 0 &&
+            x86.operands[0].type == X86_OP_IMM &&
+            x86.encoding.imm_size > 0) {
+            const int64_t target = static_cast<int64_t>(x86.operands[0].imm);
+            const int64_t newDisp = target - static_cast<int64_t>(newAddr + ci.size);
+            patchDisp(x86.encoding.imm_offset, x86.encoding.imm_size, newDisp);
+        }
+
+        if (x86.encoding.disp_size > 0) {
+            for (uint8_t op = 0; op < x86.op_count; ++op) {
+                const cs_x86_op& operand = x86.operands[op];
+                if (operand.type != X86_OP_MEM)
+                    continue;
+                if (operand.mem.base != X86_REG_RIP)
+                    continue;
+                const int64_t target =
+                    static_cast<int64_t>(oldAddr + ci.size + operand.mem.disp);
+                const int64_t newDisp =
+                    target - static_cast<int64_t>(newAddr + ci.size);
+                patchDisp(x86.encoding.disp_offset, x86.encoding.disp_size, newDisp);
+            }
+        }
+    }
+
+    cs_free(insn, count);
+    cs_close(&handle);
+    return out;
+}
+} // namespace
 
 std::vector<uint8_t> buildMemoryImage(
     const std::vector<instructionData>& insns,
@@ -189,7 +270,11 @@ std::vector<uint8_t> buildMemoryImage(
             const uint64_t off = dst - min_pc;
             if (off + chunk.bytes.size() > image.size())
                 continue;
-            std::copy(chunk.bytes.begin(), chunk.bytes.end(),
+            std::vector<uint8_t> relocated = chunk.bytes;
+            if (targetTriple.rfind("x86_64", 0) == 0) {
+                relocated = relocateX64Chunk(chunk.bytes, chunk.start_pc, dst);
+            }
+            std::copy(relocated.begin(), relocated.end(),
                       image.begin() + static_cast<size_t>(off));
         }
     }
