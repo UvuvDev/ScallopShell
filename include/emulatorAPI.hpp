@@ -158,4 +158,10 @@ public:
      */
     static int getInputFd();
 
+    /**
+     * Get the number of virtual CPUs.
+     * Returns the count of VCPUs available in the emulator.
+     */
+    static int getVCPUCount();
+
 };

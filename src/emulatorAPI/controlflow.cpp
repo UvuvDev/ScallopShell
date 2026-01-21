@@ -47,3 +47,9 @@ int Emulator::focusMemory(uint64_t lowAddress, uint64_t highAddress)
     std::string exit = socket.sendCommand(std::to_string(lowAddress) + ';' + std::to_string(highAddress) + '\n');
     return 0;
 }
+
+int Emulator::getVCPUCount()
+{
+    // Hardcoded to return 16 VCPUs for now
+    return 16;
+}

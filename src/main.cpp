@@ -16,6 +16,7 @@
 #include "emulatorAPI.hpp"
 #include "registerdisplay.hpp"
 #include "iodisplay.hpp"
+#include "cpupicker.hpp"
 #include "debug.hpp"
 
 using namespace ftxui;
@@ -54,6 +55,7 @@ int main(int argc, char** argv)
   auto mem  = ScallopUI::MemoryDisplay(nullptr, "rsp", memoryRange, 0, 8);
   auto code  = ScallopUI::MemoryDisplay(nullptr, "rip", memoryRange, 0, 8);
   auto notes = ScallopUI::Notepad();
+  auto cpus = ScallopUI::cpuPicker();
   auto regs = ScallopUI::RegisterDisplay();
   auto ioOut = ScallopUI::ioDisplay();
 
@@ -66,6 +68,7 @@ int main(int argc, char** argv)
       "memory",
       "code",
       "notepad",
+      "cpu",
   };
   
   int tab_selected = 0;
@@ -79,9 +82,10 @@ int main(int argc, char** argv)
 
   auto tab_container = Container::Tab(
       {
-          mem, 
+          mem,
           code,
           notes,
+          cpus,
       },
       &tab_selected);
 
