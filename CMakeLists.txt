@@ -81,6 +81,7 @@ target_link_libraries(scallop PRIVATE
   ${CAPSTONE_LIB}
   MinimalSocket
   Threads::Threads
+  util  # for openpty()
   # CLI11::CLI11      # uncomment if enabled CLI11 above
 )
 

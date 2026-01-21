@@ -15,6 +15,7 @@
 #include "disasmdisplay.hpp"
 #include "emulatorAPI.hpp"
 #include "registerdisplay.hpp"
+#include "iodisplay.hpp"
 #include "debug.hpp"
 
 using namespace ftxui;
@@ -41,12 +42,6 @@ int main(int argc, char** argv)
   auto screen = ScreenInteractive::Fullscreen();
   ftxui::ScreenInteractive* g_screen = &screen;
 
-  const int memoryRange = 320;
-  auto mem  = ScallopUI::MemoryDisplay(nullptr, "rsp", memoryRange, 0, 8);
-  auto code  = ScallopUI::MemoryDisplay(nullptr, "rip", memoryRange, 0, 8);
-  auto notes = ScallopUI::Notepad();
-  auto regs = ScallopUI::RegisterDisplay();
-
   Emulator emu;
   int pid = emu.startEmulation(targetBinaryName, arch);
   if (pid < 0) {
@@ -54,6 +49,13 @@ int main(int argc, char** argv)
   }
 
   std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+
+  const int memoryRange = 320;
+  auto mem  = ScallopUI::MemoryDisplay(nullptr, "rsp", memoryRange, 0, 8);
+  auto code  = ScallopUI::MemoryDisplay(nullptr, "rip", memoryRange, 0, 8);
+  auto notes = ScallopUI::Notepad();
+  auto regs = ScallopUI::RegisterDisplay();
+  auto ioOut = ScallopUI::ioDisplay();
 
   /*=================*/
 
@@ -130,18 +132,21 @@ int main(int argc, char** argv)
   /*===============*/
 
   auto cli_input = ScallopUI::InputCli();
+  auto cli_history = ScallopUI::CliHistory();
   auto cli_pane = Container::Horizontal({
     cli_input,
-    cli_input,
-    ScallopUI::CliHistory(),
+    cli_history,
+    ioOut,
   });
 
-  int splitCliHistory = 90;
-  auto cli_split = ResizableSplitLeft(cli_pane->ChildAt(0), cli_pane->ChildAt(1), &splitCliHistory);
+  int splitCliHistory = 5;
+  auto cli_split = ResizableSplitTop(cli_input, cli_history, &splitCliHistory);
+  int splitIoOutput = 150;
+  auto cli_history_io_split = ResizableSplitRight(ioOut, cli_split, &splitIoOutput);
 
   // Final vertical split: CLI (bottom) vs center (top)
   int splitCliMem = 10;
-  auto root = ResizableSplitBottom(cli_split, centerTop, &splitCliMem);
+  auto root = ResizableSplitBottom(cli_history_io_split, centerTop, &splitCliMem);
 
 
   std::thread([&]{
@@ -170,6 +175,11 @@ int main(int argc, char** argv)
       code->TakeFocus();
       return true;
     }
+    else if (e == Event::CtrlI) {
+      ioOut->TakeFocus();
+      return true;
+    }
+
     return false;     // let others handle it
   });
 

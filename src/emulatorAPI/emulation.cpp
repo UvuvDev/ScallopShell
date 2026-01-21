@@ -16,11 +16,15 @@
 #include <errno.h>
 #include <string.h>
 #include <bits/stdc++.h>
+#include <pty.h>
+#include <termios.h>
 
 #endif
 
 /* Variables and helpers */
 int child_pid_ = -1;
+int qemu_output_fd_ = -1;  // File descriptor for reading QEMU's stdout/stderr
+int qemu_input_fd_ = -1;   // File descriptor for writing to QEMU's stdin
 bool Emulator::isEmulating = false;
 
 std::string pluginExtension() {
@@ -83,7 +87,7 @@ int Emulator::startEmulation(const std::string &executablePathArg, const std::st
 
     qemuTraceLog = qemuTraceLog / "qemu.log";
 
-    // ---- build argv: qemu -d plugin -D <log> -plugin <.so> -- <target> ----
+    // ---- build argv: qemu -d plugin -D /tmp/branchlog.csv -plugin <.so> -- <target> ----
     std::vector<std::string> args_str = {
         qemuPath.string(),
         "-d", "plugin",
@@ -98,14 +102,16 @@ int Emulator::startEmulation(const std::string &executablePathArg, const std::st
     for (auto &s : args_str)
     {
         argv.push_back(const_cast<char *>(s.c_str()));
+        //std::cout << s << " ";
     }
     argv.push_back(nullptr);
 
-    // ---- set up a pipe to capture child's stdout+stderr ----
-    int pipefd[2];
-    if (::pipe(pipefd) != 0)
+    // ---- set up a pty for child's stdin/stdout/stderr ----
+    // Using a pty instead of pipes ensures line-buffered output (real-time display)
+    int pty_master, pty_slave;
+    if (::openpty(&pty_master, &pty_slave, nullptr, nullptr, nullptr) < 0)
     {
-        perror("pipe");
+        perror("openpty");
         return -1;
     }
 
@@ -115,14 +121,26 @@ int Emulator::startEmulation(const std::string &executablePathArg, const std::st
     if (pid < 0)
     {
         perror("fork");
-        ::close(pipefd[0]);
-        ::close(pipefd[1]);
+        ::close(pty_master);
+        ::close(pty_slave);
         return -1;
     }
     if (pid == 0)
     {
-        ::close(pipefd[0]);
-        ::close(pipefd[1]);
+        // Child: set up a new session and controlling terminal
+        ::setsid();
+
+        // Close master in child
+        ::close(pty_master);
+
+        // Redirect stdin, stdout, stderr to the pty slave
+        ::dup2(pty_slave, STDIN_FILENO);
+        ::dup2(pty_slave, STDOUT_FILENO);
+        ::dup2(pty_slave, STDERR_FILENO);
+
+        if (pty_slave > STDERR_FILENO)
+            ::close(pty_slave);
+
         ::execv(argv[0], argv.data());
         perror("done with QEMU");
         _exit(127);
@@ -136,10 +154,25 @@ int Emulator::startEmulation(const std::string &executablePathArg, const std::st
         perror("socket failed to initialize!");
     }
 
-    // parent
-    child_pid_ = pid;
-    ::close(pipefd[1]); // parent reads from pipefd[0]
+    // Parent: close slave, keep master for read/write
+    ::close(pty_slave);
+
+    // Store the pty master fd and make it non-blocking for UI responsiveness
+    qemu_output_fd_ = pty_master;
+    qemu_input_fd_ = pty_master;  // pty master is bidirectional
+    int flags = ::fcntl(pty_master, F_GETFL, 0);
+    ::fcntl(pty_master, F_SETFL, flags | O_NONBLOCK);
 
     return child_pid_;
+}
+
+int Emulator::getOutputFd()
+{
+    return qemu_output_fd_;
+}
+
+int Emulator::getInputFd()
+{
+    return qemu_input_fd_;
 }
 #endif

@@ -3,6 +3,7 @@
 
 
 std::unique_ptr<MinimalSocket::tcp::TcpClient<true>> PluginNetwork::tcp_client;
+bool PluginNetwork::connected_ = false;
 
 int PluginNetwork::initialize() {
 
@@ -30,7 +31,10 @@ int PluginNetwork::initialize() {
             fprintf(stderr, "[socket] connect attempt %d failed: %s\n", attempts + 1, ex.what());
         }
 
-        if (success) return 0;
+        if (success) {
+            connected_ = true;
+            return 0;
+        }
 
         std::this_thread::sleep_for(100ms);
     }
@@ -39,9 +43,13 @@ int PluginNetwork::initialize() {
 
 }
 
+bool PluginNetwork::isConnected() {
+    return connected_;
+}
+
 std::string PluginNetwork::sendCommand(std::string cmd) {
 
-    if (!tcp_client) {
+    if (!tcp_client || !connected_) {
         return {};
     }
 
@@ -52,11 +60,17 @@ std::string PluginNetwork::sendCommand(std::string cmd) {
         tcp_client->send(cmd);
         std::size_t message_max_size = 1000;
         std::string received_message = tcp_client->receive(message_max_size);
+
+        // Empty response likely means connection closed
+        if (received_message.empty()) {
+            connected_ = false;
+        }
+
         return received_message;
-    } 
-    catch (std::exception& e) {
+    }
+    catch (...) {
+        // Any exception means connection is dead
+        connected_ = false;
         return "";
     }
-
-    
 }

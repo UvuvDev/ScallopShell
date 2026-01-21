@@ -146,4 +146,16 @@ public:
 
     static bool getIsEmulating();
 
+    /**
+     * Get the file descriptor for reading QEMU's stdout/stderr output.
+     * Returns -1 if not available.
+     */
+    static int getOutputFd();
+
+    /**
+     * Get the file descriptor for writing to QEMU's stdin.
+     * Returns -1 if not available.
+     */
+    static int getInputFd();
+
 };

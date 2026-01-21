@@ -11,10 +11,12 @@ private:
 
     std::string error;
     static std::unique_ptr<MinimalSocket::tcp::TcpClient<true>> tcp_client;
+    static bool connected_;
 
 public:
 
     static int initialize();
     static std::string sendCommand(std::string cmd);
+    static bool isConnected();
 
 };
