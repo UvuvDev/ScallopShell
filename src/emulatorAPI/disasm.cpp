@@ -85,7 +85,7 @@ std::vector<InstructionInfo>* Emulator::getRunInstructions(
     int* total_lines_out
 ) {
     
-    static std::filesystem::path kCsvPath = std::filesystem::temp_directory_path() / "branchlog.csv";
+    std::filesystem::path kCsvPath = std::filesystem::temp_directory_path() / ("branchlog" + std::to_string(getSelectedVCPU()) + ".csv");
 
     static int cached_start = -1, cached_n = -1;
     static uintmax_t cached_size = 0;

@@ -62,6 +62,9 @@ export PATH=$PATH:~/path/to/package
 ```
 You can also just move it to your /usr/bin/. I don't see a downside to this. 
  
+## Controls
+
+The controls right now are not ideal. CtrlS will assign you to the CLI, CtrlA to the memory display, CtrlD the disassembly, CtrlI for the I/O display. If you want to patch the bytes in memory or code display, the display *must be selected*. This is indicated by the window being highlighted. Up and Down arrows do different things in different windows (CLI and I/O display the up arrow lets you go to the memory display, the other displays have scrolling instead). If you want to access the other tabs, you have to have the memory display selected, then press ShiftTab. Tab is not currently working. Again, sorry for any end users using this right now. The controls are bad and this will be improved.
 ## Live Patching
 
 One feature of Scallop Shell is live patching in the byte displays. If you want to change any of the bytes in the display, just click on the byte you want to change. Of course, the only values you can enter are 0-9 and A-F. Once you're done patching the bytes, hit enter and it'll save. You can hit Shift+Z to undo the edits you made UNTIL you step to the next instruction. Upon stepping, the live patcher will send a request to the emulator to modify the memory you changed. This then clears the history, so undoing is no longer possible. You can still edit it again of course.

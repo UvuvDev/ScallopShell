@@ -123,7 +123,7 @@ public:
     // File paths for output
     static char g_mem_path[256];
     static char g_reg_path[256];
-    static FILE *g_out;
+    static FILE *g_out[MAX_VCPUS];
     static int g_log_disas;
 
     vcpu_pending_ops vcpu_op[MAX_VCPUS];

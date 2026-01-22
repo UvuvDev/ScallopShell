@@ -129,7 +129,7 @@ static void log(unsigned int vcpu_index, void *udata)
 
 
     auto *ctx = static_cast<exec_ctx *>(udata);
-    if (!ctx || !scallopstate.g_out) // If anything failed to initialize, ignore it
+    if (!ctx || !scallopstate.g_out[vcpu_index]) // If anything failed to initialize, ignore it
 
     {
         return;
@@ -154,19 +154,19 @@ static void log(unsigned int vcpu_index, void *udata)
                                 : bytes_to_hex(ctx->insn_bytes.data(), ctx->insn_bytes.size());
     int written = 0;
     if (scallopstate.g_log_disas) {
-        written = fprintf(scallopstate.g_out, "0x%" PRIx64 ",%s,%s0x%" PRIx64 ",0x%" PRIx64 ",0x%" PRIx64 ",\"%s\",\"%s\",\"%s\"\n",
-                          ctx->pc, 
-                          ctx->kind.c_str(), 
-                          (ctx->branch_target ? "" : ""), 
+        written = fprintf(scallopstate.g_out[vcpu_index], "0x%" PRIx64 ",%s,%s0x%" PRIx64 ",0x%" PRIx64 ",0x%" PRIx64 ",\"%s\",\"%s\",\"%s\"\n",
+                          ctx->pc,
+                          ctx->kind.c_str(),
+                          (ctx->branch_target ? "" : ""),
                           ctx->branch_target ? ctx->branch_target : 0,
-                          ctx->fallthrough, 
-                          ctx->tb_vaddr, 
+                          ctx->fallthrough,
+                          ctx->tb_vaddr,
                           bytes_hex.c_str(),
                           ctx->disas.empty() ? "" : ctx->disas.c_str(),
                           ctx->symbol.c_str());
     }
     else {
-        written = fprintf(scallopstate.g_out, "0x%" PRIx64 ",%s,%s0x%" PRIx64 ",0x%" PRIx64 ",0x%" PRIx64 ",\"%s\"\n",
+        written = fprintf(scallopstate.g_out[vcpu_index], "0x%" PRIx64 ",%s,%s0x%" PRIx64 ",0x%" PRIx64 ",0x%" PRIx64 ",\"%s\"\n",
                           ctx->pc, ctx->kind.c_str(), (ctx->branch_target ? "" : ""), ctx->branch_target ? ctx->branch_target : 0,
                           ctx->fallthrough, ctx->tb_vaddr, bytes_hex.c_str());
     }
@@ -174,7 +174,7 @@ static void log(unsigned int vcpu_index, void *udata)
     {
         debug("fprintf failed for pc=0x%" PRIx64 ": %s\n", ctx->pc, strerror(errno));
     }
-    fflush(scallopstate.g_out);
+    fflush(scallopstate.g_out[vcpu_index]);
 
     cur_pc = ctx->pc;
 

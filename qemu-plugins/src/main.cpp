@@ -17,7 +17,7 @@ int vcpu_current_thread_index = 0;
 
 char ScallopState::g_mem_path[256] = {0};
 char ScallopState::g_reg_path[256] = {0};
-FILE *ScallopState::g_out = nullptr;
+FILE *ScallopState::g_out[MAX_VCPUS] = {nullptr};
 int ScallopState::g_log_disas = 0;
 SymbolResolver ScallopState::g_resolver;
 
@@ -485,11 +485,12 @@ static void plugin_exit(qemu_plugin_id_t id, void *u)
 {
     scallopstate.getGates().pauseAll();
     stop_request_worker();
-    if (scallopstate.g_out && scallopstate.g_out != stderr)
-    {
-        fflush(scallopstate.g_out);
-        fclose(scallopstate.g_out);
-        scallopstate.g_out = NULL;
+    for (unsigned i = 0; i < MAX_VCPUS; i++) {
+        if (scallopstate.g_out[i] && scallopstate.g_out[i] != stderr) {
+            fflush(scallopstate.g_out[i]);
+            fclose(scallopstate.g_out[i]);
+            scallopstate.g_out[i] = nullptr;
+        }
     }
 }
 
@@ -530,14 +531,16 @@ int qemu_plugin_install(qemu_plugin_id_t id, const qemu_info_t *info, int argc, 
         snprintf(scallopstate.g_reg_path, sizeof(scallopstate.g_reg_path), path.c_str());
     }
 
-    scallopstate.g_out = fopen( (std::filesystem::temp_directory_path() / "branchlog.csv").c_str(), "w+");
-    if (!scallopstate.g_out)
-    {
-        fprintf(stderr, "[branchlog] failed to open '%s'\n", outfile);
-        scallopstate.g_out = stderr;
+    // Open per-vcpu branch log files
+    for (unsigned i = 0; i < MAX_VCPUS; i++) {
+        std::string filename = "branchlog" + std::to_string(i) + ".csv";
+        scallopstate.g_out[i] = fopen((std::filesystem::temp_directory_path() / filename).c_str(), "w+");
+        if (!scallopstate.g_out[i]) {
+            fprintf(stderr, "[branchlog] failed to open '%s'\n", filename.c_str());
+            scallopstate.g_out[i] = stderr;
+        }
+        setvbuf(scallopstate.g_out[i], NULL, _IOLBF, 0);
     }
-
-    setvbuf(scallopstate.g_out, NULL, _IOLBF, 0);
 
     // Probably shouldnt hardcode this but whatever
     scallopstate.g_log_disas = 1;
@@ -547,8 +550,11 @@ int qemu_plugin_install(qemu_plugin_id_t id, const qemu_info_t *info, int argc, 
             outfile ? outfile : "(stderr)", scallopstate.g_mem_path, scallopstate.g_reg_path);
     fflush(stderr);
 
-    fprintf(scallopstate.g_out, "pc,kind,branch_target,fallthrough,tb_vaddr,bytes%s,symbol\n", scallopstate.g_log_disas ? ",disas" : "");
-    fflush(scallopstate.g_out);
+    // Write CSV headers to all vcpu files
+    for (unsigned i = 0; i < MAX_VCPUS; i++) {
+        fprintf(scallopstate.g_out[i], "pc,kind,branch_target,fallthrough,tb_vaddr,bytes%s,symbol\n", scallopstate.g_log_disas ? ",disas" : "");
+        fflush(scallopstate.g_out[i]);
+    }
 
     Dl_info soinfo{};
     if (dladdr((void *)&qemu_plugin_install, &soinfo) && soinfo.dli_fname)
