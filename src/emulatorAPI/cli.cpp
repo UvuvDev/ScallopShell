@@ -24,9 +24,10 @@ bool Emulator::getIsFlagQueued(int vcpu, vcpu_operation_t cmd) {
 
 int Emulator::addBreakpoint(uint64_t address, std::string &comment)
 {
-    char cmd[128];
-    std::snprintf(cmd, sizeof(cmd), "break 0x%llx\n", address);
-    
+    char cmd[256];
+    std::snprintf(cmd, sizeof(cmd), "break 0x%llx %d %s\n",
+                  address, selectedVCPU, selectedThread.c_str());
+
     if (socket.sendCommand(cmd).compare(0, 2, "ok") != 0)
         return 1;
 

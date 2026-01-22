@@ -171,11 +171,11 @@ int main(int argc, char** argv)
       disasm->TakeFocus();
       return true;
     }
-    else if (e == Event::CtrlM) {
+    else if (e == Event::CtrlA) {
       mem->TakeFocus();
       return true;
     }
-    else if (e == Event::CtrlA) {
+    else if (e == Event::CtrlM) {
       code->TakeFocus();
       return true;
     }

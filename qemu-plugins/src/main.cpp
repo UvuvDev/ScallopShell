@@ -7,7 +7,6 @@
 #include "disasm.hpp"
 #include "setreg.hpp"
 
-
 #include <atomic>
 #include <dlfcn.h>
 #include <thread>
@@ -188,6 +187,10 @@ SCALLOP_REQUEST_TYPE ScallopState::classifyRequest(const std::string &request) c
     {
         return SCALLOP_REQUEST_TYPE::getReg;
     }
+    if (starts_with("get vcpu") || normalized == "vcpu" || normalized == "vcpus")
+    {
+        return SCALLOP_REQUEST_TYPE::getVcpu;
+    }
     if (starts_with("set registers") || starts_with("regs set"))
     {
         return SCALLOP_REQUEST_TYPE::setReg;
@@ -275,14 +278,23 @@ int ScallopState::update(int vcpu)
         {
             uint64_t addr;
             int n;
+            int vcpu_id;
+            int thread_id;
+            char thread_name[64];
     
             // Read the request arguments from the req
-            sscanf(req.getRequest().c_str(), "get memory 0x%llx %d", &addr, &n);
+            if (sscanf(req.getRequest().c_str(), "get memory 0x%llx %d %d %d", &addr, &n, &vcpu_id, &thread_id) != 4 &&
+                sscanf(req.getRequest().c_str(), "get memory 0x%llx %d %d %63s", &addr, &n, &vcpu_id, thread_name) != 4)
+            {
+                break;
+            }
+            (void)thread_id;
+            (void)thread_name;
             
             scallop_mem_arguments* memArgs;
 
             // If setting the flags and arguments doesn't succeed, continue
-            if (setFlagAndInitArguments<scallop_mem_arguments>(vcpu, VCPU_OP_DUMP_MEM, &memArgs)) {
+            if (setFlagAndInitArguments<scallop_mem_arguments>(vcpu_id, VCPU_OP_DUMP_MEM, &memArgs)) {
                 //debug("fail");
                 break;
             }
@@ -292,7 +304,7 @@ int ScallopState::update(int vcpu)
             memArgs->mem_size = n;
 
             // Set the flags arguments to memArgs
-            setArguments(vcpu, VCPU_OP_DUMP_MEM, memArgs);
+            setArguments(vcpu_id, VCPU_OP_DUMP_MEM, memArgs);
             
             break;
 
@@ -300,21 +312,77 @@ int ScallopState::update(int vcpu)
         case SCALLOP_REQUEST_TYPE::getReg:
         {
             int* throwaway;
-            setFlagAndInitArguments<int>(vcpu, VCPU_OP_DUMP_REGS, &throwaway);
+            int vcpu_id;
+            int thread_id;
+            char thread_name[64];
+            if (sscanf(req.getRequest().c_str(), "get regs %d %d", &vcpu_id, &thread_id) != 2 &&
+                sscanf(req.getRequest().c_str(), "get regs %d %63s", &vcpu_id, thread_name) != 2 &&
+                sscanf(req.getRequest().c_str(), "get registers %d %d", &vcpu_id, &thread_id) != 2 &&
+                sscanf(req.getRequest().c_str(), "get registers %d %63s", &vcpu_id, thread_name) != 2 &&
+                sscanf(req.getRequest().c_str(), "regs %d %d", &vcpu_id, &thread_id) != 2 &&
+                sscanf(req.getRequest().c_str(), "regs %d %63s", &vcpu_id, thread_name) != 2)
+            {
+                break;
+            }
+            (void)thread_id;
+            (void)thread_name;
+            setFlagAndInitArguments<int>(vcpu_id, VCPU_OP_DUMP_REGS, &throwaway);
+            break;
+        }
+        case SCALLOP_REQUEST_TYPE::getVcpu:
+        {
+            int vcpu_id;
+            int thread_id;
+            char thread_name[64];
+            if (sscanf(req.getRequest().c_str(), "get vcpu %d %d", &vcpu_id, &thread_id) != 2 &&
+                sscanf(req.getRequest().c_str(), "get vcpu %d %63s", &vcpu_id, thread_name) != 2 &&
+                sscanf(req.getRequest().c_str(), "get vcpus %d %d", &vcpu_id, &thread_id) != 2 &&
+                sscanf(req.getRequest().c_str(), "get vcpus %d %63s", &vcpu_id, thread_name) != 2 &&
+                sscanf(req.getRequest().c_str(), "vcpu %d %d", &vcpu_id, &thread_id) != 2 &&
+                sscanf(req.getRequest().c_str(), "vcpu %d %63s", &vcpu_id, thread_name) != 2 &&
+                sscanf(req.getRequest().c_str(), "vcpus %d %d", &vcpu_id, &thread_id) != 2 &&
+                sscanf(req.getRequest().c_str(), "vcpus %d %63s", &vcpu_id, thread_name) != 2)
+            {
+                break;
+            }
+            (void)vcpu_id;
+            (void)thread_id;
+            (void)thread_name;
+            const int vcpus = qemu_plugin_num_vcpus();
+            constexpr int threads_per_vcpu = 1;
+            const int total_threads = vcpus * threads_per_vcpu;
+            char response[128];
+            snprintf(response, sizeof(response),
+                     "vcpu_info vcpus=%d threads_per_vcpu=%d total_threads=%d\n",
+                     vcpus, threads_per_vcpu, total_threads);
+            debug("%s\n", response);
+            if (auto *sock = scallopstate.socket())
+            {
+                sock->sendLine(response);
+            }
             break;
         }
         case SCALLOP_REQUEST_TYPE::setMem:
         {
             uint64_t addr;
             int n;
+            int vcpu_id;
+            int thread_id;
+            char thread_name[64];
     
             // Read the request arguments from the req
-            sscanf(req.getRequest().c_str(), "set memory 0x%llx %d", &addr, &n);
+            if (sscanf(req.getRequest().c_str(), "set memory 0x%llx %d %d %d", &addr, &n, &vcpu_id, &thread_id) != 4 &&
+                sscanf(req.getRequest().c_str(), "set memory 0x%llx %d %d %63s", &addr, &n, &vcpu_id, thread_name) != 4)
+            {
+                break;
+            }
+            (void)thread_id;
+            (void)thread_name;
             
             scallop_mem_arguments* memArgs;
 
             // If setting the flags and arguments doesn't succeed, continue
-            if (setFlagAndInitArguments<scallop_mem_arguments>(vcpu, VCPU_OP_SET_MEM, &memArgs)) {
+            if (setFlagAndInitArguments<scallop_mem_arguments>(vcpu_id, VCPU_OP_SET_MEM, &memArgs)) {
                 //debug("fail");
                 break;
             }
@@ -325,7 +393,7 @@ int ScallopState::update(int vcpu)
 
 
             // Set the flags arguments to memArgs
-            setArguments(vcpu, VCPU_OP_SET_MEM, memArgs);
+            setArguments(vcpu_id, VCPU_OP_SET_MEM, memArgs);
             
             break;
         }
@@ -337,24 +405,53 @@ int ScallopState::update(int vcpu)
         case SCALLOP_REQUEST_TYPE::step:
         {
             int steps;
-            sscanf(req.getRequest().c_str(), "step %d", &steps);
-            scallopstate.getGates().stepIfNeeded(0, steps);
+            int vcpu_id;
+            int thread_id;
+            char thread_name[64];
+            if (sscanf(req.getRequest().c_str(), "step %d %d %d", &steps, &vcpu_id, &thread_id) != 3 &&
+                sscanf(req.getRequest().c_str(), "step %d %d %63s", &steps, &vcpu_id, thread_name) != 3)
+            {
+                break;
+            }
+            (void)thread_id;
+            (void)thread_name;
+            scallopstate.getGates().stepIfNeeded(vcpu_id, steps);
             break;
         }
         case SCALLOP_REQUEST_TYPE::resume:
         {
+            int vcpu_id;
+            int thread_id;
+            char thread_name[64];
+            if (sscanf(req.getRequest().c_str(), "resume %d %d", &vcpu_id, &thread_id) != 2 &&
+                sscanf(req.getRequest().c_str(), "resume %d %63s", &vcpu_id, thread_name) != 2)
+            {
+                break;
+            }
+            (void)vcpu_id;
+            (void)thread_id;
+            (void)thread_name;
             scallopstate.getGates().resumeAll();
             break;
         }
         case SCALLOP_REQUEST_TYPE::breakpoint:
         {
             uint64_t addr;
+            int vcpu_id;
+            int thread_id;
+            char thread_name[64];
 
             // Read the request arguments from the req
-            sscanf(req.getRequest().c_str(), "break 0x%llx", &addr);
+            if (sscanf(req.getRequest().c_str(), "break 0x%llx %d %d", &addr, &vcpu_id, &thread_id) != 3 &&
+                sscanf(req.getRequest().c_str(), "break 0x%llx %d %63s", &addr, &vcpu_id, thread_name) != 3)
+            {
+                break;
+            }
+            (void)thread_id;
+            (void)thread_name;
 
             debug("%s ...... parsed val = %llx", req.getRequest().c_str(), addr);
-            scallopstate.getGates().addBreakpoint(addr, vcpu);
+            scallopstate.getGates().addBreakpoint(addr, vcpu_id);
             break;
         }
         }

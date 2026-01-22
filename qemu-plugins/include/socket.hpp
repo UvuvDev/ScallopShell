@@ -23,6 +23,8 @@ public:
     bool start(MinimalSocket::Port port = kDefaultPort);
     void stop();
 
+    bool sendLine(const std::string &line);
+
     bool isRunning() const { return running_.load(); }
     MinimalSocket::Port port() const { return bound_port_; }
 

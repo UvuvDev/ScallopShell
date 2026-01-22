@@ -110,10 +110,10 @@ std::vector<uint8_t>* Emulator::getMemory(uint64_t address, int n,
     else
         hi = cache.address + span;
 
-    char cmd[128];
-    std::snprintf(cmd, sizeof(cmd), "get memory 0x%llx %d\n",
-                  (unsigned long long)cache.address, n);
-
+    char cmd[256];
+    std::snprintf(cmd, sizeof(cmd), "get memory 0x%llx %d %d %s\n",
+                  (unsigned long long)cache.address, n,
+                  selectedVCPU, selectedThread.c_str());
 
     if (socket.sendCommand(cmd).compare(0, 2, "ok") != 0)
     {
@@ -238,9 +238,10 @@ int Emulator::modifyMemory(uint64_t address, std::vector<uint8_t>* data, int n) 
     if (!writeWholeFile("memdump.txt", memoryDumpWrite))
         return 1;
 
-    char cmd[128];
-    std::snprintf(cmd, sizeof(cmd), "set memory 0x%llx %d\n",
-                  (unsigned long long)address, copy_len);
+    char cmd[256];
+    std::snprintf(cmd, sizeof(cmd), "set memory 0x%llx %d %d %s\n",
+                  (unsigned long long)address, copy_len,
+                  selectedVCPU, selectedThread.c_str());
     if (socket.sendCommand(cmd).compare(0, 2, "ok") != 0)
         return 1;
 

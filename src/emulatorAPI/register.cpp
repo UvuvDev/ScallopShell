@@ -15,7 +15,8 @@ std::vector<std::string> *Emulator::getRegisters()
     }
 
     // Request registers (either because a refresh was requested or we're still waiting on a retry)
-    if (socket.sendCommand("get registers\n").compare(0, 2, "ok") != 0)
+    std::string cmd = "get registers " + std::to_string(selectedVCPU) + " " + selectedThread + "\n";
+    if (socket.sendCommand(cmd).compare(0, 2, "ok") != 0)
     {
         tryagain = true;
         return &registers;

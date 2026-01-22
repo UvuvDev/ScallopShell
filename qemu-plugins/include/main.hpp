@@ -39,6 +39,7 @@ enum class SCALLOP_REQUEST_TYPE {
     defaultReq,
     getMem,
     getReg,
+    getVcpu,
     step,
     resume,
     setMem,

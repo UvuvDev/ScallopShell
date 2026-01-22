@@ -81,6 +81,21 @@ void ScallopSocket::stop() {
     bound_port_ = 0;
 }
 
+bool ScallopSocket::sendLine(const std::string &line) {
+    std::lock_guard<std::mutex> guard(active_client_mu_);
+    if (!active_client_) {
+        return false;
+    }
+
+    try {
+        active_client_->send(line);
+        return true;
+    } catch (const std::exception &ex) {
+        debug("[socket] failed to send line: %s\n", ex.what());
+        return false;
+    }
+}
+
 void ScallopSocket::acceptLoop() {
     while (running_) {
         try {

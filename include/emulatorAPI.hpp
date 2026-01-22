@@ -85,6 +85,9 @@ private:
 
     static std::atomic_uint64_t flags[MAX_VCPUS];
 
+    static int selectedVCPU;
+    static std::string selectedThread;
+
 public:
 
     static int setFlag(int vcpu, vcpu_operation_t cmd);
@@ -163,5 +166,40 @@ public:
      * Returns the count of VCPUs available in the emulator.
      */
     static int getVCPUCount();
+
+    /**
+     * Get the list of threads for a specific VCPU.
+     * Returns thread names/identifiers for the given CPU.
+     */
+    static std::vector<std::string> getVCPUThreadList(int vcpuIndex);
+
+    /**
+     * VCPU info structure returned by getVCPUInfo.
+     */
+    struct VCPUInfo {
+        int vcpus;
+        int threads_per_vcpu;
+        int total_threads;
+        bool valid;
+    };
+
+    /**
+     * Query VCPU info from the backend for a specific VCPU and thread.
+     * Sends: get vcpu <vcpu_index> <thread_name>
+     * Parses response: vcpu_info vcpus=%d threads_per_vcpu=%d total_threads=%d
+     */
+    static VCPUInfo getVCPUInfo(int vcpuIndex, const std::string& thread);
+
+    /**
+     * Set the currently selected VCPU and thread for commands.
+     */
+    static void setSelectedVCPU(int vcpu);
+    static void setSelectedThread(const std::string& thread);
+
+    /**
+     * Get the currently selected VCPU and thread.
+     */
+    static int getSelectedVCPU();
+    static std::string getSelectedThread();
 
 };
