@@ -28,6 +28,7 @@ Component cpuPicker() {
         int selectedCpu_ = 0;
         int selectedThread_ = 0;
         int lastSelectedCpu_ = -1;
+        int lastVcpuCount_ = -1;
         std::vector<std::string> cpuEntries_;
         std::vector<std::string> threadEntries_;
         Component cpuRadiobox_;
@@ -37,7 +38,32 @@ Component cpuPicker() {
 
         bool Focusable() const override { return true; }
 
+        void refreshVCPUList() {
+            // Query current VCPU count from backend
+            int vcpuCount = Emulator::getVCPUCount();
+            if (vcpuCount > 16) {
+                vcpuCount = 16;
+            }
+
+            // Only rebuild if count changed
+            if (vcpuCount != lastVcpuCount_ && vcpuCount > 0) {
+                cpuEntries_.clear();
+                for (int i = 0; i < vcpuCount; i++) {
+                    cpuEntries_.push_back("CPU " + std::to_string(i));
+                }
+                lastVcpuCount_ = vcpuCount;
+
+                // Clamp selection if needed
+                if (selectedCpu_ >= vcpuCount) {
+                    selectedCpu_ = vcpuCount - 1;
+                }
+            }
+        }
+
         void updateSelection() {
+            // Refresh VCPU list from backend
+            refreshVCPUList();
+
             // Update thread list if CPU changed
             if (selectedCpu_ != lastSelectedCpu_) {
                 threadEntries_ = Emulator::getVCPUThreadList(selectedCpu_);
@@ -96,28 +122,17 @@ Component cpuPicker() {
             // Load CPU ASCII art
             cpuArt_ = loadAsset("assets/CPU.txt");
 
-            // Get the number of VCPUs from the emulator API
-            int vcpuCount = Emulator::getVCPUCount();
-
-            // Limit to 16 max
-            if (vcpuCount > 16) {
-                vcpuCount = 16;
-            }
-
-            // Create entries for each CPU
-            for (int i = 0; i < vcpuCount; i++) {
-                cpuEntries_.push_back("CPU " + std::to_string(i));
-            }
+            // Initialize with at least one CPU entry (will be refreshed dynamically)
+            cpuEntries_.push_back("CPU 0");
+            lastVcpuCount_ = 1;
 
             // Initialize thread list for CPU 0
-            threadEntries_ = Emulator::getVCPUThreadList(0);
+            threadEntries_.push_back("thread_0_0");
             lastSelectedCpu_ = 0;
 
             // Initialize global selection state
             Emulator::setSelectedVCPU(0);
-            if (!threadEntries_.empty()) {
-                Emulator::setSelectedThread(threadEntries_[0]);
-            }
+            Emulator::setSelectedThread(threadEntries_[0]);
 
             // Create the radiobox components
             cpuRadiobox_ = Radiobox(&cpuEntries_, &selectedCpu_);
