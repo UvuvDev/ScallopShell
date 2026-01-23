@@ -111,24 +111,26 @@ namespace ScallopUI
         }
 
 
-        bool handleMouseTakeover(ftxui::Mouse m) {
+        bool handleMouseTakeover(ftxui::Mouse m, Event e) {
 
-               // Local (x,y) inside the rendered element:
-                int lx = m.x - mouseBox.x_min - leftmostX;
-                int ly = m.y - mouseBox.y_min - highestY;
-                // Map local coords to your data model:
-                int cell_w = 3; // Each byte is 2 characters + a space
-                int cell_h = 1; // one line per row
+            // Local (x,y) inside the rendered element:
+            int lx = m.x - mouseBox.x_min - leftmostX;
+            int ly = m.y - mouseBox.y_min - highestY;
+            // Map local coords to your data model:
+            int cell_w = 3; // Each byte is 2 characters + a space
+            int cell_h = 1; // one line per row
 
-                int col = lx / cell_w;
-                int row = (ly / cell_h) + top_row_;
+            int col = lx / cell_w;
+            int row = (ly / cell_h) + top_row_;
 
-                selectedRow = row;
-                selectedColumn = col;
-                    
-                editing_ = true;
+            selectedRow = row;
+            selectedColumn = col;
 
-                return true; 
+            if (selectedRow >= rows_)
+                return ComponentBase::OnEvent(e);
+            editing_ = true;
+            
+            return true; 
 
         }
         public:
@@ -143,6 +145,8 @@ namespace ScallopUI
                   followedReg_(std::move(followedReg)),
                   cache_key_(followedReg_.empty() ? "default" : followedReg_)
                   {
+                    shouldAutopatch = Checkbox("Autopatch", &autoPatch);
+                    Add(shouldAutopatch);
                   }
 
         private:
@@ -165,6 +169,8 @@ namespace ScallopUI
             std::string followedReg_;
             std::string cache_key_;
             int current_vcpu = 0;
+            bool autoPatch = false;
+            Component shouldAutopatch;
 
             bool Focusable() const override { return true; }
 
@@ -184,6 +190,7 @@ namespace ScallopUI
                         pending_nibble_ = -1;
                         editing_ = false;
                         pushed_snapshot_ = false;
+                        autoPatch = false;
                         editTrail.clear();
                         return true;
                     }
@@ -217,7 +224,7 @@ namespace ScallopUI
                     // Ignore other keys while editing
                     const auto& m = e.mouse();     
                     if (m.button == ftxui::Mouse::Left && m.motion == ftxui::Mouse::Pressed) {   
-                        return handleMouseTakeover(m);
+                        return handleMouseTakeover(m, e);
                     }
                     return false;
                 }
@@ -270,9 +277,9 @@ namespace ScallopUI
 
                 const auto& m = e.mouse();
                 if (m.button == ftxui::Mouse::Left && m.motion == ftxui::Mouse::Pressed)              
-                    return handleMouseTakeover(m);
-
-                return false;
+                    return handleMouseTakeover(m, e);
+    
+                return ComponentBase::OnEvent(e);
             }
 
             /*====================================*/
@@ -298,8 +305,11 @@ namespace ScallopUI
                 std::vector<Element> lines;
                 lines.reserve(rows_ + 2);
 
+
                 auto header = hbox({text(" Address             "), text("Bytes") | bold}) | underlined | dim;
                 lines.push_back(header);
+                //lines.push_back( hbox({text("Row = " + (std::to_string(selectedRow)) + "   Col = " + std::to_string(selectedColumn) + "   " + std::to_string(rows_))}));
+                
 
                 const int max_rows = static_cast<int>((size_ + bpr_ - 1) / bpr_);
                 const int end_row = std::min(top_row_ + rows_, max_rows);
@@ -352,13 +362,12 @@ namespace ScallopUI
                 }
 
                 // Final display - add border and focus
-                auto display =  vbox(std::move(lines)) | border | focus;
+                auto display =  vbox(std::move(lines), shouldAutopatch->Render()) | border | focus;
 
                 if (Focused())
                     return display | color(Color::Magenta) | reflect(mouseBox);
-
-                return display | reflect(mouseBox);
-
+                
+                return vbox({display | reflect(mouseBox)});
 
             }
         };
