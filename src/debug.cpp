@@ -1,11 +1,12 @@
 #include "debug.hpp"
+#include "filesystem"
 
-FILE* debugOut = fopen("DEBUG_LOG.txt", "w+");
+std::filesystem::path debugPath = std::filesystem::temp_directory_path() / "DEBUG_LOG.txt";
+FILE* debugOut = fopen(debugPath.c_str(), "w+");
 
 void OUT_TO_FILE(std::string debug) {
     fprintf(debugOut, "%s", debug.c_str());
     fflush(debugOut);
-
 }
 
 

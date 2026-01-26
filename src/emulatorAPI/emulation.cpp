@@ -81,11 +81,9 @@ int Emulator::startEmulation(const std::string &executablePathArg, const std::st
 
     // Outputs for QEMU Plugin
     std::filesystem::path currentWorkingDir = std::filesystem::current_path();
-    std::filesystem::path qemuTraceLog = currentWorkingDir;
+    std::filesystem::path qemuTraceLog = std::filesystem::temp_directory_path() / "qemu.log";
     std::filesystem::path pluginPath = ::getenv("SCALLOP_QEMU_PLUGIN") ? ::getenv("SCALLOP_QEMU_PLUGIN") : currentWorkingDir / "qemu-plugins";
     std::filesystem::path csvPath = std::filesystem::temp_directory_path() / "branchlog.csv";
-
-    qemuTraceLog = qemuTraceLog / "qemu.log";
 
     // ---- build argv: qemu -d plugin -D /tmp/branchlog.csv -plugin <.so> -- <target> ----
     std::vector<std::string> args_str = {
