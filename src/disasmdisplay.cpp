@@ -61,6 +61,17 @@ namespace ScallopUI {
                     if (renderedArea.Contain(m.x, m.y) && !Focused()) {
                         TakeFocus();
                     }
+                    if (m.button == ftxui::Mouse::WheelUp) {
+                        if (currentTopRow > 0) currentTopRow--;
+                        follow_tail = false;
+                        return true;
+                    }
+                    if (m.button == ftxui::Mouse::WheelDown) {
+                        int maxTopRow = std::max(0, totalLines - min_top);
+                        if (currentTopRow < maxTopRow) currentTopRow++;
+                        if (currentTopRow >= maxTopRow) follow_tail = true; // user came back to bottom
+                        return true;
+                    }
                 }
 
                 return ComponentBase::OnEvent(e); // forward anything else

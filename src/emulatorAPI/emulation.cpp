@@ -146,7 +146,6 @@ int Emulator::startEmulation(const std::string &executablePathArg, const std::st
         perror("done with QEMU");
         _exit(127);
     }
-
     
     child_pid_ = pid;
 
