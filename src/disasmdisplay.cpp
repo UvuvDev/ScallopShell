@@ -169,19 +169,24 @@ namespace ScallopUI {
                         checkbox | color(Color::White);
                     }
 
-                    Element left = text(hex8ByteStr(info.address)) | color(Color::Magenta);
+                    auto disasmColor = color(Color::Magenta);
 
-                    if (info.instructionType == "other") 
-                        left = hbox({left, text(" - " + info.instruction + "\n") | color(Color::CornflowerBlue)});
+                    if (hasBreakpoint) 
+                        disasmColor = color(Color::White);
+                    else if (info.instructionType == "other") 
+                        disasmColor = color(Color::Magenta);
                     else if (info.instructionType == "jmp") 
-                        left = hbox({left, text(" - " + info.instruction + "\n") | color(Color::Red1)});
+                        disasmColor = color(Color::Red1);
                     else if (info.instructionType == "call") 
-                        left = hbox({left, text(" - " + info.instruction + "\n") | color(Color::Yellow1)});
+                        disasmColor = color(Color::Yellow1);
                     else if (info.instructionType == "cond") 
-                        left = hbox({left, text(" - " + info.instruction + "\n") | color(Color::Orange1)});
+                        disasmColor = color(Color::Orange1);
                     else if (info.instructionType == "ret") 
-                        left = hbox({left, text(" - " + info.instruction + "\n") | color(Color::MediumPurple1)});
-                
+                        disasmColor = color(Color::MediumPurple1);
+                    
+                    Element left = hbox({text(hex8ByteStr(info.address)) | disasmColor, text(" - " + info.instruction + "\n") | color(Color::CornflowerBlue)});
+                    
+
                     Element mid = text("   ");//separator();
 
                     // Print the symbol
@@ -189,22 +194,22 @@ namespace ScallopUI {
 
                     Element row = hbox({checkbox, left, mid, right}) | reflect(rowBoxes[r]);
                     if (hasBreakpoint) {
-                        row = row | bgcolor(Color::GrayDark) | color(Color::White);
+                        row = row | color(Color::White);
                     }
                     lines.emplace_back(row);
                     //lines.emplace_back(hbox({left}));
                 
+                    }
+
+                    auto display = vbox(lines) | border | focus | reflect(renderedArea);
+
+                    if (Focused())
+                        return display | color(Color::Magenta);
+
+                    return display;
                 }
 
-                auto display = vbox(lines) | border | focus | reflect(renderedArea);
-
-                if (Focused())
-                    return display | color(Color::Magenta);
-
-                return display;
-            }
-
-
+        
         public:
 
             explicit Impl(AppStatePtr state) : state_(std::move(state)) {}
