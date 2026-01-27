@@ -2,6 +2,8 @@
 #include <atomic>
 #include <cstdint>
 #include <pthread.h>
+#include <stdio.h>
+#include <vector>
 #include "functional"
 #include "string"
 #include "unordered_map"
@@ -77,6 +79,13 @@ public:
      * @param scriptPath Script to be run's filepath
      */
     int runFunctionAtBreakpoint(int breakpoint, gate_t& gate, std::string scriptPath);
+
+    /**
+     * Load breakpoints from a config file without rewriting it.
+     * @param vcpu VCPU index to update
+     * @param in Opened config file
+     */
+    int loadBreakpointsFromFile(unsigned vcpu, FILE *in);
 
 protected:
     gate_t gates_[MAX_VCPUS];

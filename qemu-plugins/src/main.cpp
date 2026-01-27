@@ -12,6 +12,7 @@
 #include <sstream>
 #include <thread>
 #include <chrono>
+#include <cstdlib>
 
 QEMU_PLUGIN_EXPORT int qemu_plugin_version = QEMU_PLUGIN_VERSION;
 int vcpu_current_thread_index = 0;
@@ -67,6 +68,96 @@ namespace
 
 namespace
 {
+    std::filesystem::path resolve_config_dir(const std::string &binary_stem)
+    {
+        const char *home = std::getenv("HOME");
+        if (home && *home)
+        {
+            std::filesystem::path dir = std::filesystem::path(home) / ".scallop" / binary_stem;
+            std::error_code ec;
+            std::filesystem::create_directories(dir, ec);
+            if (!ec)
+            {
+                return dir;
+            }
+            debug("[config] failed to create %s: %s\n", dir.c_str(), ec.message().c_str());
+        }
+        return std::filesystem::temp_directory_path();
+    }
+
+    std::string basename_without_extension(const char *path)
+    {
+        if (!path || !*path)
+        {
+            return {};
+        }
+        return std::filesystem::path(path).stem().string();
+    }
+
+    void ensure_binary_context_ready_impl()
+    {
+        bool expected = false;
+        if (!scallopstate.binary_ctx_ready.compare_exchange_strong(expected, true))
+        {
+            return;
+        }
+
+        const char *bin_path = qemu_plugin_path_to_binary();
+        if (!bin_path || !*bin_path)
+        {
+            scallopstate.binary_ctx_ready.store(false);
+            return;
+        }
+
+        scallopstate.binary_path = bin_path;
+        scallopstate.binary_name = basename_without_extension(bin_path);
+        if (scallopstate.binary_name.empty())
+        {
+            scallopstate.binary_ctx_ready.store(false);
+        }
+    }
+
+    void ensure_binary_configs_ready_impl()
+    {
+        bool expected = false;
+        if (!scallopstate.binary_configs_ready.compare_exchange_strong(expected, true))
+        {
+            return;
+        }
+
+        if (!scallopstate.binary_ctx_ready.load(std::memory_order_relaxed))
+        {
+            scallopstate.binary_configs_ready.store(false);
+            return;
+        }
+
+        const std::filesystem::path base_dir = resolve_config_dir(scallopstate.binary_name);
+
+        for (unsigned i = 0; i < MAX_VCPUS; i++)
+        {
+            std::string configFilename =
+                "config" + scallopstate.binary_name + "_vcpu" + std::to_string(i) + ".txt";
+            std::filesystem::path configPath = base_dir / configFilename;
+
+            FILE *cfg = fopen(configPath.c_str(), "r+");
+            if (!cfg)
+            {
+                cfg = fopen(configPath.c_str(), "w+");
+            }
+
+            if (!cfg)
+            {
+                fprintf(stderr, "[branchlog] failed to open '%s'\n", configPath.c_str());
+                scallopstate.binaryConfigs[i] = stderr;
+                continue;
+            }
+
+            setvbuf(cfg, NULL, _IOLBF, 0);
+            scallopstate.binaryConfigs[i] = cfg;
+            scallopstate.getGates().loadBreakpointsFromFile(i, cfg);
+        }
+    }
+
     /**
      * Normalizes all requests to be lowercase, no newlines or carriage returns,
      * keeps whitespace to max one character, and leaves non ASCII bytes untouched.
@@ -112,6 +203,24 @@ namespace
         return normalized;
     }
 } // namespace
+
+void ensure_binary_context_ready()
+{
+    ensure_binary_context_ready_impl();
+}
+
+void ensure_binary_configs_ready()
+{
+    ensure_binary_configs_ready_impl();
+}
+
+static void vcpu_init_cb(qemu_plugin_id_t id, unsigned int vcpu_index)
+{
+    (void)id;
+    (void)vcpu_index;
+    ensure_binary_context_ready();
+    ensure_binary_configs_ready();
+}
 
 /**
  * All the scallop_request definitions
@@ -617,15 +726,6 @@ int qemu_plugin_install(qemu_plugin_id_t id, const qemu_info_t *info, int argc, 
         }
         setvbuf(scallopstate.g_out[i], NULL, _IOLBF, 0);
 
-        // Open all the config files
-        std::string configFilename = "configFile" + std::to_string(i) + ".txt";
-        scallopstate.binaryConfigs[i] = fopen((std::filesystem::temp_directory_path() / configFilename).c_str(), "w+");
-        if (!scallopstate.binaryConfigs[i]) {
-            fprintf(stderr, "[branchlog] failed to open '%s'\n", configFilename.c_str());
-            scallopstate.binaryConfigs[i] = stderr;
-        }
-        setvbuf(scallopstate.binaryConfigs[i], NULL, _IOLBF, 0);
-
     }
 
     // Probably shouldnt hardcode this but whatever
@@ -667,7 +767,7 @@ int qemu_plugin_install(qemu_plugin_id_t id, const qemu_info_t *info, int argc, 
         start_request_worker();
     }
 
-    // qemu_plugin_register_vcpu_init_cb(id, vcpu_init_cb);
+    qemu_plugin_register_vcpu_init_cb(id, vcpu_init_cb);
     qemu_plugin_register_vcpu_tb_trans_cb(id, tb_trans_cb);
     qemu_plugin_register_atexit_cb(id, plugin_exit, NULL);
     return 0;

@@ -1,5 +1,6 @@
 #pragma once
 #include <algorithm>
+#include <atomic>
 
 #include <stdio.h>
 #include <stdint.h>
@@ -128,6 +129,11 @@ public:
     static FILE *binaryConfigs[MAX_VCPUS];
     static int g_log_disas;
 
+    std::string binary_path;
+    std::string binary_name;
+    std::atomic<bool> binary_ctx_ready{false};
+    std::atomic<bool> binary_configs_ready{false};
+
     vcpu_pending_ops vcpu_op[MAX_VCPUS];
 
     std::vector<scallop_request> requests;
@@ -200,6 +206,8 @@ public:
 };
 
 extern ScallopState scallopstate;
+void ensure_binary_context_ready();
+void ensure_binary_configs_ready();
 
 /**
  * For context: the purpose of this variable is to make sure that all 

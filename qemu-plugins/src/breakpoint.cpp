@@ -7,6 +7,8 @@
 
 namespace {
     void write_breakpoints_to_config(unsigned vcpu, const std::vector<uint64_t> &breakpoints) {
+        ensure_binary_context_ready();
+        ensure_binary_configs_ready();
         if (vcpu >= MAX_VCPUS) {
             return;
         }

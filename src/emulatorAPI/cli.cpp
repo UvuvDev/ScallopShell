@@ -46,3 +46,83 @@ int Emulator::deleteBreakpoint(uint64_t address)
 
     return 0;
 }
+
+static std::filesystem::path configPathForVCPU(const std::string &binaryStem, int vcpuIndex)
+{
+    if (binaryStem.empty() || vcpuIndex < 0) {
+        return {};
+    }
+
+    std::string filename = "config" + binaryStem + "_vcpu" + std::to_string(vcpuIndex) + ".txt";
+
+    const char *home = std::getenv("HOME");
+    if (home && *home) {
+        std::filesystem::path homePath = std::filesystem::path(home) / ".scallop" / binaryStem / filename;
+        if (std::filesystem::exists(homePath)) {
+            return homePath;
+        }
+    }
+
+    std::filesystem::path tempPath = std::filesystem::temp_directory_path() / filename;
+    if (std::filesystem::exists(tempPath)) {
+        return tempPath;
+    }
+
+    return {};
+}
+
+static std::string trimLine(const std::string &s)
+{
+    size_t a = s.find_first_not_of(" \t\r\n");
+    if (a == std::string::npos) {
+        return {};
+    }
+    size_t b = s.find_last_not_of(" \t\r\n");
+    return s.substr(a, b - a + 1);
+}
+
+std::vector<uint64_t> Emulator::getBreakpointsFromConfig(int vcpuIndex)
+{
+    if (vcpuIndex < 0) {
+        vcpuIndex = getSelectedVCPU();
+    }
+
+    std::vector<uint64_t> out;
+    const std::filesystem::path cfgPath = configPathForVCPU(binaryStem, vcpuIndex);
+    if (cfgPath.empty()) {
+        return out;
+    }
+
+    std::ifstream in(cfgPath);
+    if (!in.is_open()) {
+        return out;
+    }
+
+    std::string line;
+    bool first_line = true;
+    while (std::getline(in, line)) {
+        if (first_line) {
+            first_line = false;
+            if (line.rfind("breakpoint_addr", 0) == 0) {
+                continue;
+            }
+        }
+
+        std::string t = trimLine(line);
+        if (t.empty()) {
+            continue;
+        }
+
+        try {
+            size_t idx = 0;
+            uint64_t addr = std::stoull(t, &idx, 0);
+            if (idx > 0) {
+                out.push_back(addr);
+            }
+        } catch (...) {
+            continue;
+        }
+    }
+
+    return out;
+}

@@ -24,6 +24,8 @@ namespace ScallopUI {
             std::vector<Box> checkboxBoxes;
             std::vector<uint64_t> rowAddresses;
             std::unordered_set<uint64_t> breakpoints;
+            bool breakpointsLoaded = false;
+            int lastBreakpointVcpu = -1;
             AppStatePtr state_;
 
             void setBreakpoint(uint64_t address, bool enabled) {
@@ -129,6 +131,15 @@ namespace ScallopUI {
                 
             
                 const std::vector<InstructionInfo>* assemblyInstructions = Emulator::getRunInstructions(currentTopRow, min_top, &hasUpdated, &totalLines);
+                const int currentVcpu = Emulator::getSelectedVCPU();
+                if (!breakpointsLoaded || hasUpdated || currentVcpu != lastBreakpointVcpu) {
+                    breakpoints.clear();
+                    for (uint64_t addr : Emulator::getBreakpointsFromConfig(currentVcpu)) {
+                        breakpoints.insert(addr);
+                    }
+                    breakpointsLoaded = true;
+                    lastBreakpointVcpu = currentVcpu;
+                }
 
                 instructionCount = assemblyInstructions->size();
                 maxTopRow = std::max(0, totalLines - min_top);

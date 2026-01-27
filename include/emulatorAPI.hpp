@@ -87,6 +87,7 @@ private:
 
     static int selectedVCPU;
     static std::string selectedThread;
+    static std::string binaryStem;
 
 public:
 
@@ -102,6 +103,7 @@ public:
 
     static int addBreakpoint(uint64_t address, std::string& comment);
     static int deleteBreakpoint(uint64_t address);
+    static std::vector<uint64_t> getBreakpointsFromConfig(int vcpuIndex = -1);
 
     /**
      * Modify the memory from the address given until the address + n. 

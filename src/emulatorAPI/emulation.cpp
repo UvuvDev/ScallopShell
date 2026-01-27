@@ -26,6 +26,7 @@ int child_pid_ = -1;
 int qemu_output_fd_ = -1;  // File descriptor for reading QEMU's stdout/stderr
 int qemu_input_fd_ = -1;   // File descriptor for writing to QEMU's stdin
 bool Emulator::isEmulating = false;
+std::string Emulator::binaryStem;
 
 std::string pluginExtension() {
     #ifdef _WIN32 
@@ -69,6 +70,9 @@ int Emulator::startEmulation(const std::string &executablePathArg, const std::st
     }
     if (arch != "") {
         qemuArch = arch;
+    }
+    if (!executablePath.empty()) {
+        binaryStem = std::filesystem::path(executablePath).stem().string();
     }
 
 

@@ -2,6 +2,8 @@
 #include "debug.hpp"
 
 #include <algorithm>
+#include <cctype>
+#include <cstring>
 
 GateManager::GateManager()
     : logging_enabled_(1),
@@ -132,4 +134,54 @@ void GateManager::inRange(uint64_t lowAddr, uint64_t highAddr) {
     }
     filter_lo_.store(static_cast<uintptr_t>(lowAddr), std::memory_order_relaxed);
     filter_hi_.store(static_cast<uintptr_t>(highAddr), std::memory_order_relaxed);
+}
+
+int GateManager::loadBreakpointsFromFile(unsigned vcpu, FILE *in) {
+    if (!in || in == stderr) {
+        return -1;
+    }
+
+    gate_t &gate = gateFor(vcpu);
+    std::vector<uint64_t> parsed;
+    char line[256];
+
+    if (fseek(in, 0, SEEK_SET) != 0) {
+        return -1;
+    }
+
+    bool first_line = true;
+    while (fgets(line, sizeof(line), in)) {
+        if (first_line) {
+            first_line = false;
+            if (strncmp(line, "breakpoint_addr", 15) == 0) {
+                continue;
+            }
+        }
+
+        char *p = line;
+        while (*p && std::isspace(static_cast<unsigned char>(*p))) {
+            ++p;
+        }
+        if (*p == '\0') {
+            continue;
+        }
+
+        char *end = nullptr;
+        uint64_t addr = std::strtoull(p, &end, 0);
+        if (!end || end == p) {
+            continue;
+        }
+        parsed.push_back(addr);
+    }
+
+    if (!parsed.empty()) {
+        std::sort(parsed.begin(), parsed.end());
+        parsed.erase(std::unique(parsed.begin(), parsed.end()), parsed.end());
+    }
+
+    pthread_mutex_lock(&gate.bp_write_mu);
+    std::atomic_store(&gate.bp_vec, std::make_shared<const std::vector<uint64_t>>(std::move(parsed)));
+    pthread_mutex_unlock(&gate.bp_write_mu);
+
+    return 0;
 }
