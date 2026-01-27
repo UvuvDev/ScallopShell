@@ -77,7 +77,7 @@ namespace ScallopUI
 {
 
     std::vector<std::string> history;
-    uint historyMaxLen = 6;
+    uint historyMaxLen = 1;
     CLI::App app("Scallop Shell");
     ftxui::Box mouseBox;
 

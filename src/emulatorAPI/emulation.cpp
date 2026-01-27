@@ -87,6 +87,9 @@ int Emulator::startEmulation(const std::string &executablePathArg, const std::st
 
     // ---- build argv: qemu -d plugin -D /tmp/branchlog.csv -plugin <.so> -- <target> ----
     std::vector<std::string> args_str = {
+        "setarch",
+        qemuArch,
+        "-R",
         qemuPath.string(),
         "-d", "plugin",
         "-D", qemuTraceLog.string(),
@@ -100,7 +103,7 @@ int Emulator::startEmulation(const std::string &executablePathArg, const std::st
     for (auto &s : args_str)
     {
         argv.push_back(const_cast<char *>(s.c_str()));
-        //std::cout << s << " ";
+        fprintf(stderr, "%s ", s.c_str());
     }
     argv.push_back(nullptr);
 
@@ -139,11 +142,12 @@ int Emulator::startEmulation(const std::string &executablePathArg, const std::st
         if (pty_slave > STDERR_FILENO)
             ::close(pty_slave);
 
-        ::execv(argv[0], argv.data());
+        ::execvp(argv[0], argv.data());
         perror("done with QEMU");
         _exit(127);
     }
 
+    
     child_pid_ = pid;
 
     // If socket fails to initialize
