@@ -49,6 +49,13 @@ void resetEmulator() {
     Emulator::startEmulation("", "");
 }
 
+void exitScallop() {
+    auto* screen = ftxui::ScreenInteractive::Active();
+    if (screen) {
+        screen->Exit();
+    }
+}
+
 void runLastFunc() {
     switch (lastRunFunction) {
     case LastRunFunction::step:
@@ -246,6 +253,9 @@ namespace ScallopUI
 
         auto reset = app.add_subcommand("reset");
         reset->callback(resetEmulator);
+
+        auto exitCall = app.add_subcommand("exit");
+        exitCall->callback(exitScallop);
 
         std::string breakAddrStr;
 

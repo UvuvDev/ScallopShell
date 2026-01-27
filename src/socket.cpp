@@ -9,6 +9,8 @@ int PluginNetwork::initialize() {
 
     using namespace std::chrono_literals;
 
+    std::this_thread::sleep_for(100ms);
+
     static MinimalSocket::Port server_port = 31337;
     static std::string server_address = "127.0.0.1";
 

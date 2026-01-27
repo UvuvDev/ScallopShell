@@ -49,7 +49,7 @@ int main(int argc, char** argv)
       std::cerr << "Failed to start QEMU\n";
   }
 
-  std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
   const int memoryRange = 320;
   auto mem  = ScallopUI::MemoryDisplay(nullptr, "rsp", memoryRange, 0, 8);
