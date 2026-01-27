@@ -8,10 +8,10 @@
 
 #include "guihelpers.hpp"
 #include "emulatorAPI.hpp"
+#include "appstate.hpp"
 
 namespace ScallopUI {
 
-    ftxui::Component DisasmDisplay();
+    ftxui::Component DisasmDisplay(AppStatePtr state);
 
 }
-

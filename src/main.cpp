@@ -62,7 +62,7 @@ int main(int argc, char** argv) {
     state->cpuPicker = ScallopUI::cpuPicker();
     state->registers = ScallopUI::RegisterDisplay();
     state->ioOutput = ScallopUI::ioDisplay();
-    state->disasm = ScallopUI::DisasmDisplay();
+    state->disasm = ScallopUI::DisasmDisplay(state);
     state->cliInput = ScallopUI::InputCli();
 
     auto cli_history = ScallopUI::CliHistory();
@@ -107,6 +107,44 @@ int main(int argc, char** argv) {
     root = CatchEvent(root, [&](const Event& e) {
         // Don't process global keys if modal is open
         if (state->hasModal()) return false;
+
+        // Mouse-to-focus routing based on split positions.
+        // This prevents a previously focused pane from stealing mouse events.
+        if (e.is_mouse()) {
+            auto m = const_cast<ftxui::Event&>(e).mouse();
+            const int x = m.x;
+            const int y = m.y;
+
+            const int dimx = state->screen ? state->screen->dimx() : 0;
+            const int dimy = state->screen ? state->screen->dimy() : 0;
+
+            // Avoid routing focus in the bottom region; let CLI/IO handle hover.
+            // The split sizes here are tricky, and the local components already do this well.
+            if (dimy > 0 && y >= dimy - state->cliSplitSize - 2) {
+                return false;
+            }
+
+            // Top pane: centerTop = ResizableSplitLeft(leftAndMiddle, right, &registerSplitSize)
+            // Left area width is registerSplitSize; within it, disasmSplitSize divides tabs vs disasm.
+            const int left_area_boundary = state->registerSplitSize;
+            if (x < left_area_boundary) {
+                if (x < state->disasmSplitSize) {
+                    switch (state->selectedTab) {
+                        case 0: state->focusPane(ScallopUI::AppState::Pane::Memory); break;
+                        case 1: state->focusPane(ScallopUI::AppState::Pane::Code); break;
+                        case 2: state->focusPane(ScallopUI::AppState::Pane::Notes); break;
+                        case 3: state->focusPane(ScallopUI::AppState::Pane::CPU); break;
+                        default: break;
+                    }
+                } else {
+                    state->focusPane(ScallopUI::AppState::Pane::Disasm);
+                }
+            } else {
+                state->focusPane(ScallopUI::AppState::Pane::Registers);
+            }
+            // Don't consume the mouse event; children still need it.
+            return false;
+        }
 
         // Focus shortcuts
         if (e == Event::CtrlS) {

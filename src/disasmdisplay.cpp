@@ -8,7 +8,7 @@ using namespace ftxui;
 namespace ScallopUI {
 
 
-    Component DisasmDisplay() {
+    Component DisasmDisplay(AppStatePtr state) {
         class Impl : public ComponentBase {
         private:
             int rows;
@@ -21,8 +21,10 @@ namespace ScallopUI {
             int totalLines = 0;
             int lastTotalLines = 0;  
             std::vector<Box> rowBoxes;
+            std::vector<Box> checkboxBoxes;
             std::vector<uint64_t> rowAddresses;
             std::unordered_set<uint64_t> breakpoints;
+            AppStatePtr state_;
 
             void setBreakpoint(uint64_t address, bool enabled) {
                 if (enabled) {
@@ -78,12 +80,20 @@ namespace ScallopUI {
                 // Hover-to-focus
                 if (e.is_mouse()) {
                     const auto& m = e.mouse();
-                    if (renderedArea.Contain(m.x, m.y) && !Focused()) {
-                        TakeFocus();
+                    const bool inRenderedArea = renderedArea.Contain(m.x, m.y);
+                    const bool inDisasmPaneBySplit =
+                        state_ ? (m.x >= state_->disasmSplitSize) : true;
+
+                    if (!(inRenderedArea && inDisasmPaneBySplit)) {
+                        return false;  // Don't steal mouse events from other panes.
                     }
-                    if (m.button == Mouse::Left && m.motion == Mouse::Pressed) {
-                        for (int i = 0; i < instructionCount && i < static_cast<int>(rowBoxes.size()); ++i) {
-                            if (!rowBoxes[i].Contain(m.x, m.y)) continue;
+
+                    // Only handle explicit checkbox clicks; otherwise let other panes react.
+                    if (m.button == Mouse::Left &&
+                        (m.motion == Mouse::Pressed || m.motion == Mouse::Released)) {
+                        for (int i = 0; i < instructionCount &&
+                                        i < static_cast<int>(checkboxBoxes.size()); ++i) {
+                            if (!checkboxBoxes[i].Contain(m.x, m.y)) continue;
                             if (i >= static_cast<int>(rowAddresses.size())) return true;
                             const auto address = rowAddresses[static_cast<size_t>(i)];
                             const bool enabled = !breakpoints.contains(address);
@@ -91,17 +101,20 @@ namespace ScallopUI {
                             return true;
                         }
                     }
-                    if (m.button == ftxui::Mouse::WheelUp) {
+
+                    if (Focused() && m.button == ftxui::Mouse::WheelUp) {
                         if (currentTopRow > 0) currentTopRow--;
                         follow_tail = false;
                         return true;
                     }
-                    if (m.button == ftxui::Mouse::WheelDown) {
+                    if (Focused() && m.button == ftxui::Mouse::WheelDown) {
                         int maxTopRow = std::max(0, totalLines - min_top);
                         if (currentTopRow < maxTopRow) currentTopRow++;
                         if (currentTopRow >= maxTopRow) follow_tail = true; // user came back to bottom
                         return true;
                     }
+
+                    return false;
                 }
 
                 return ComponentBase::OnEvent(e); // forward anything else
@@ -119,6 +132,7 @@ namespace ScallopUI {
                 instructionCount = assemblyInstructions->size();
                 maxTopRow = std::max(0, totalLines - min_top);
                 rowBoxes.assign(static_cast<size_t>(instructionCount), {});
+                checkboxBoxes.assign(static_cast<size_t>(instructionCount), {});
                 rowAddresses.assign(static_cast<size_t>(instructionCount), 0);
 
                 auto at_bottom = [&]{
@@ -145,13 +159,14 @@ namespace ScallopUI {
                     const bool hasBreakpoint = breakpoints.contains(info.address);
                     const bool checked = hasBreakpoint;
 
-                    Element checkbox = text(checked ? "[x] " : "[ ] ");
+                    Element checkbox = text(checked ? "[x] " : "[ ] ")
+                        | reflect(checkboxBoxes[r]);
 
                     if (checked) {
-                        checkbox | color(Color::Red1);
+                        checkbox | color(Color::GrayDark);
                     }
                     else {
-                        checkbox | color(Color::GrayDark);
+                        checkbox | color(Color::White);
                     }
 
                     Element left = text(hex8ByteStr(info.address)) | color(Color::Magenta);
@@ -192,14 +207,12 @@ namespace ScallopUI {
 
         public:
 
-            Impl() {
-                
-            }
+            explicit Impl(AppStatePtr state) : state_(std::move(state)) {}
 
             
 
         };
 
-        return Make<Impl>();
+        return Make<Impl>(std::move(state));
     }
 }
