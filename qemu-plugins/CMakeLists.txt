@@ -54,7 +54,7 @@ add_library(refactorscallop SHARED
 
 # If you want a specific C++ standard
 set_target_properties(refactorscallop PROPERTIES
-    CXX_STANDARD 17
+    CXX_STANDARD 20
     CXX_STANDARD_REQUIRED YES
     CXX_EXTENSIONS NO
     OUTPUT_NAME "refactorscallop"  # produces librefactorscallop.so
@@ -76,6 +76,7 @@ target_compile_options(refactorscallop PRIVATE ${GLIB2_CFLAGS_OTHER})
 target_link_libraries(refactorscallop
     PRIVATE
         ${GLIB2_LIBRARIES}
+        elf
         pthread
         MinimalSocket
 )

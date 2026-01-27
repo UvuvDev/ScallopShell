@@ -3,10 +3,20 @@
 std::string hex8ByteStr(uint64_t addr)
 {
     std::ostringstream os;
-    os << "0x" << std::uppercase << std::hex
-       << std::setw(2 * sizeof(void *)) << std::setfill('0') << addr;
+
+    // First: create minimal hex with 0x
+    std::ostringstream tmp;
+    tmp << "0x" << std::uppercase << std::hex << addr;
+    std::string core = tmp.str(); // "0x7FFFF565CB90"
+
+    // Now right-align it in a fixed-width field
+    constexpr int width = 2 + 2 * sizeof(void*); // e.g. 18 on 64-bit
+    os << core; // os << std::setw(width) << std::setfill(' ') << core;
+
     return os.str();
 }
+
+
 std::string hex1ByteStr(uint8_t b)
 {
     std::ostringstream os;

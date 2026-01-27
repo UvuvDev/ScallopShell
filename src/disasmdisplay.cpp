@@ -166,17 +166,17 @@ namespace ScallopUI {
                         checkbox | color(Color::GrayDark);
                     }
                     else {
-                        checkbox | color(Color::White);
+                        checkbox | color(Color::Red1);
                     }
 
                     auto disasmColor = color(Color::Magenta);
 
                     if (hasBreakpoint) 
-                        disasmColor = color(Color::White);
+                        disasmColor = color(Color::Red1);
                     else if (info.instructionType == "other") 
                         disasmColor = color(Color::Magenta);
                     else if (info.instructionType == "jmp") 
-                        disasmColor = color(Color::Red1);
+                        disasmColor = color(Color::Yellow1);
                     else if (info.instructionType == "call") 
                         disasmColor = color(Color::Yellow1);
                     else if (info.instructionType == "cond") 
@@ -184,7 +184,7 @@ namespace ScallopUI {
                     else if (info.instructionType == "ret") 
                         disasmColor = color(Color::MediumPurple1);
                     
-                    Element left = hbox({text(hex8ByteStr(info.address)) | disasmColor, text(" - " + info.instruction + "\n") | color(Color::CornflowerBlue)});
+                    Element left = hbox({text(hex8ByteStr(info.address)) | disasmColor, text(" - " + info.instruction + "\n") | (hasBreakpoint ? color(Color::Red1) : color(Color::CornflowerBlue))});
                     
 
                     Element mid = text("   ");//separator();

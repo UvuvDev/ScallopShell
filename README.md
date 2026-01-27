@@ -30,6 +30,7 @@ OPTIONS:
 
 Build QEMU from source, make sure the TCG Plugin flags are set. Without this, the Linux native implementation will not work. Then, go to ~/.bashrc, 
 ```
+export QEMU_SRC_DIR= # Source directory for the custom QEMU build (only if building plugin from source!)
 export SCALLOP_QEMU_BUILD= # Build path of QEMU
 export SCALLOP_QEMU_PLUGIN= # Plugin path for scallop_plugin.so
 ```
