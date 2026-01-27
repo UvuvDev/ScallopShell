@@ -69,9 +69,10 @@ namespace ScallopUI
          */
         void commit_nibble(int v) {
             if (selectedRow < 0 || selectedColumn < 0) return;
+            if (!data_ || data_->empty()) return;
 
             const size_t idx = (size_t)selectedRow * bpr_ + selectedColumn;
-            if (idx >= size_) return;
+            if (idx >= data_->size()) return;
 
             // Always snapshot before we mutate
             hexEditHistory.emplace_back(selectedRow, selectedColumn, data_->at(idx));
@@ -96,7 +97,7 @@ namespace ScallopUI
                     ++selectedRow;
                 }
                 // if we walked off the end, exit edit mode
-                if ((size_t)selectedRow * bpr_ + selectedColumn >= size_) {
+                if ((size_t)selectedRow * bpr_ + selectedColumn >= data_->size()) {
                     editing_ = false;
                 }
             }
@@ -221,7 +222,9 @@ namespace ScallopUI
             // All event handling
             bool OnEvent(Event e) override
             {
-                const int max_rows = static_cast<int>((size_ + bpr_ - 1) / bpr_);
+                // Use actual data size if available, otherwise requested size
+                const size_t actual_size = (data_ != nullptr && !data_->empty()) ? data_->size() : size_;
+                const int max_rows = static_cast<int>((actual_size + bpr_ - 1) / bpr_);
                 const int max_top = std::max(0, max_rows - rows_);
 
                 // Handle goto mode input
@@ -266,12 +269,14 @@ namespace ScallopUI
                     }
                     // Backspace "un-types" the high nibble edit (restores original if needed)
                     if (e == Event::Backspace) {
-                        if (!hexEditHistory.empty()) {
+                        if (!hexEditHistory.empty() && data_ && !data_->empty()) {
                             HexEditHistory lastEdit = hexEditHistory.back();
-
-                            data_->at(lastEdit.row*bpr_ + lastEdit.col) = lastEdit.data;
-                            selectedRow = lastEdit.row;
-                            selectedColumn = lastEdit.col;
+                            size_t idx = lastEdit.row * bpr_ + lastEdit.col;
+                            if (idx < data_->size()) {
+                                data_->at(idx) = lastEdit.data;
+                                selectedRow = lastEdit.row;
+                                selectedColumn = lastEdit.col;
+                            }
                             hexEditHistory.pop_back();
                         }
                         if (!editTrail.empty()) {
@@ -330,12 +335,14 @@ namespace ScallopUI
                     return true;
                 }
                 if (e == Event::Backspace) {
-                    if (!hexEditHistory.empty()) {
+                    if (!hexEditHistory.empty() && data_ && !data_->empty()) {
                         HexEditHistory lastEdit = hexEditHistory.back();
-
-                        data_->at(lastEdit.row*bpr_ + lastEdit.col) = lastEdit.data;
-                        selectedRow = lastEdit.row;
-                        selectedColumn = lastEdit.col;
+                        size_t idx = lastEdit.row * bpr_ + lastEdit.col;
+                        if (idx < data_->size()) {
+                            data_->at(idx) = lastEdit.data;
+                            selectedRow = lastEdit.row;
+                            selectedColumn = lastEdit.col;
+                        }
                         hexEditHistory.pop_back();
                     }
                     markMemoryDirty();
@@ -350,6 +357,18 @@ namespace ScallopUI
                 // Hover-to-focus: take focus when mouse enters this component
                 if (mouseBox.Contain(m.x, m.y) && !Focused()) {
                     TakeFocus();
+                }
+
+                // Scroll wheel support (only when mouse is over this component)
+                if (mouseBox.Contain(m.x, m.y)) {
+                    if (m.button == ftxui::Mouse::WheelUp) {
+                        top_row_ = std::max(0, top_row_ - 3);
+                        return true;
+                    }
+                    if (m.button == ftxui::Mouse::WheelDown) {
+                        top_row_ = std::min(max_top, top_row_ + 3);
+                        return true;
+                    }
                 }
 
                 if (m.button == ftxui::Mouse::Left && m.motion == ftxui::Mouse::Pressed)
@@ -383,7 +402,9 @@ namespace ScallopUI
                 auto header = hbox({text(" Address             "), text("Bytes") | bold}) | underlined | dim;
                 lines.push_back(header);
 
-                const int max_rows = static_cast<int>((size_ + bpr_ - 1) / bpr_);
+                // Use actual data size, not requested size, to avoid out-of-bounds access
+                const size_t actual_size = (data_ != nullptr) ? data_->size() : 0;
+                const int max_rows = static_cast<int>((actual_size + bpr_ - 1) / bpr_);
                 const int end_row = std::min(top_row_ + rows_, max_rows);
 
                 for (int r = top_row_; r < end_row && data_ != nullptr && !data_->empty(); ++r)
@@ -398,7 +419,7 @@ namespace ScallopUI
                     for (int i = 0; i < bpr_; ++i)
                     {
                         size_t idx = start + i;
-                        if (idx < size_)
+                        if (idx < actual_size)
                         {
                             // Show the data bytes
                             uint8_t b = data_->at(idx);

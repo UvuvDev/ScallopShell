@@ -53,7 +53,7 @@ int main(int argc, char** argv) {
     ScallopUI::initCliCommands();
 
     // ===== Create components, storing refs in state =====
-    const int memoryRange = 320;
+    const int memoryRange = 320*4;
 
     // Using AppState-aware components
     state->memory = ScallopUI::MemoryDisplayWithState(state, "rsp", memoryRange, 0, 8);
