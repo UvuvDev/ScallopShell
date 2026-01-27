@@ -89,8 +89,8 @@ namespace ScallopUI {
                     }
 
                     // Only handle explicit checkbox clicks; otherwise let other panes react.
-                    if (m.button == Mouse::Left &&
-                        (m.motion == Mouse::Pressed || m.motion == Mouse::Released)) {
+                    // Use Released to avoid toggling twice (Pressed + Released).
+                    if (m.button == Mouse::Left && m.motion == Mouse::Released) {
                         for (int i = 0; i < instructionCount &&
                                         i < static_cast<int>(checkboxBoxes.size()); ++i) {
                             if (!checkboxBoxes[i].Contain(m.x, m.y)) continue;

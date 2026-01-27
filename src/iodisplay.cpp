@@ -128,6 +128,16 @@ namespace ScallopUI
                     if (scrollOffset_ >= maxScroll) followTail_ = true;
                     return true;
                 }
+                if (Focused() && e.mouse().button == ftxui::Mouse::WheelUp) {
+                    if (scrollOffset_ > 0) scrollOffset_--;
+                    followTail_ = false;
+                    return true;
+                }
+                if (Focused() && e.mouse().button == ftxui::Mouse::WheelDown) {
+                    if (scrollOffset_ < maxScroll) scrollOffset_++;
+                    if (scrollOffset_ >= maxScroll) followTail_ = true;
+                    return true;
+                }
                 if (e == Event::PageUp)
                 {
                     scrollOffset_ = std::max(0, scrollOffset_ - 10);
