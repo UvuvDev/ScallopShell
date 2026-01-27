@@ -1,6 +1,8 @@
 #include "disasmdisplay.hpp"
 #include "emulatorAPI.hpp"
 
+#include <unordered_set>
+
 using namespace ftxui;
 
 namespace ScallopUI {
@@ -18,6 +20,24 @@ namespace ScallopUI {
             bool follow_tail = true; 
             int totalLines = 0;
             int lastTotalLines = 0;  
+            std::vector<Box> rowBoxes;
+            std::vector<uint64_t> rowAddresses;
+            std::unordered_set<uint64_t> breakpoints;
+
+            void setBreakpoint(uint64_t address, bool enabled) {
+                if (enabled) {
+                    // Only send to the backend when the breakpoint is newly enabled.
+                    if (!breakpoints.contains(address)) {
+                        std::string comment;
+                        Emulator::addBreakpoint(address, comment);
+                    }
+                    breakpoints.insert(address);
+                    return;
+                }
+
+                // We currently don't have a removeBreakpoint API, so just clear locally.
+                breakpoints.erase(address);
+            }
 
             bool Focusable() const override { return true; }
 
@@ -61,6 +81,16 @@ namespace ScallopUI {
                     if (renderedArea.Contain(m.x, m.y) && !Focused()) {
                         TakeFocus();
                     }
+                    if (m.button == Mouse::Left && m.motion == Mouse::Pressed) {
+                        for (int i = 0; i < instructionCount && i < static_cast<int>(rowBoxes.size()); ++i) {
+                            if (!rowBoxes[i].Contain(m.x, m.y)) continue;
+                            if (i >= static_cast<int>(rowAddresses.size())) return true;
+                            const auto address = rowAddresses[static_cast<size_t>(i)];
+                            const bool enabled = !breakpoints.contains(address);
+                            setBreakpoint(address, enabled);
+                            return true;
+                        }
+                    }
                     if (m.button == ftxui::Mouse::WheelUp) {
                         if (currentTopRow > 0) currentTopRow--;
                         follow_tail = false;
@@ -88,6 +118,8 @@ namespace ScallopUI {
 
                 instructionCount = assemblyInstructions->size();
                 maxTopRow = std::max(0, totalLines - min_top);
+                rowBoxes.assign(static_cast<size_t>(instructionCount), {});
+                rowAddresses.assign(static_cast<size_t>(instructionCount), 0);
 
                 auto at_bottom = [&]{
                     int slack = 0;
@@ -108,24 +140,43 @@ namespace ScallopUI {
                 lines.push_back(header);
 
                 for (int r = 0; r < instructionCount; r++) {
-                    Element left = text(hex8ByteStr(assemblyInstructions->at(r).address)) | color(Color::Magenta);
+                    const auto& info = assemblyInstructions->at(r);
+                    rowAddresses[static_cast<size_t>(r)] = info.address;
+                    const bool hasBreakpoint = breakpoints.contains(info.address);
+                    const bool checked = hasBreakpoint;
 
-                    if (assemblyInstructions->at(r).instructionType == "other") 
-                        left = hbox({left, text(" - " + assemblyInstructions->at(r).instruction + "\n") | color(Color::CornflowerBlue)});
-                    else if (assemblyInstructions->at(r).instructionType == "jmp") 
-                        left = hbox({left, text(" - " + assemblyInstructions->at(r).instruction + "\n") | color(Color::Red1)});
-                    else if (assemblyInstructions->at(r).instructionType == "call") 
-                        left = hbox({left, text(" - " + assemblyInstructions->at(r).instruction + "\n") | color(Color::Yellow1)});
-                    else if (assemblyInstructions->at(r).instructionType == "cond") 
-                        left = hbox({left, text(" - " + assemblyInstructions->at(r).instruction + "\n") | color(Color::Orange1)});
-                    else if (assemblyInstructions->at(r).instructionType == "ret") 
-                        left = hbox({left, text(" - " + assemblyInstructions->at(r).instruction + "\n") | color(Color::MediumPurple1)});
+                    Element checkbox = text(checked ? "[x] " : "[ ] ");
+
+                    if (checked) {
+                        checkbox | color(Color::Red1);
+                    }
+                    else {
+                        checkbox | color(Color::GrayDark);
+                    }
+
+                    Element left = text(hex8ByteStr(info.address)) | color(Color::Magenta);
+
+                    if (info.instructionType == "other") 
+                        left = hbox({left, text(" - " + info.instruction + "\n") | color(Color::CornflowerBlue)});
+                    else if (info.instructionType == "jmp") 
+                        left = hbox({left, text(" - " + info.instruction + "\n") | color(Color::Red1)});
+                    else if (info.instructionType == "call") 
+                        left = hbox({left, text(" - " + info.instruction + "\n") | color(Color::Yellow1)});
+                    else if (info.instructionType == "cond") 
+                        left = hbox({left, text(" - " + info.instruction + "\n") | color(Color::Orange1)});
+                    else if (info.instructionType == "ret") 
+                        left = hbox({left, text(" - " + info.instruction + "\n") | color(Color::MediumPurple1)});
                 
                     Element mid = text("   ");//separator();
 
                     // Print the symbol
-                    Element right = hbox({filler(), text(" " +  assemblyInstructions->at(r).symbol) | color(Color::Magenta)});
-                    lines.emplace_back(hbox({left, mid, right}));
+                    Element right = hbox({filler(), text(" " +  info.symbol) | color(Color::Magenta)});
+
+                    Element row = hbox({checkbox, left, mid, right}) | reflect(rowBoxes[r]);
+                    if (hasBreakpoint) {
+                        row = row | bgcolor(Color::GrayDark) | color(Color::White);
+                    }
+                    lines.emplace_back(row);
                     //lines.emplace_back(hbox({left}));
                 
                 }

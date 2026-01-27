@@ -103,7 +103,7 @@ int Emulator::startEmulation(const std::string &executablePathArg, const std::st
     for (auto &s : args_str)
     {
         argv.push_back(const_cast<char *>(s.c_str()));
-        fprintf(stderr, "%s ", s.c_str());
+        //fprintf(stderr, "%s ", s.c_str());
     }
     argv.push_back(nullptr);
 
