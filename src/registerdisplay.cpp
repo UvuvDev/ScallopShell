@@ -11,8 +11,6 @@ namespace ScallopUI
         class Impl : public ComponentBase
         {
         private:
-            Box renderBox;
-
             bool Focusable() const override { return false; }
 
             Element OnRender() override
@@ -58,8 +56,7 @@ namespace ScallopUI
                     }
                 }
 
-                auto display = vbox(lines) | border | reflect(renderBox);
-                return display;
+                return vbox(lines) | border;
             }
 
         public:

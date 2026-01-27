@@ -346,6 +346,12 @@ namespace ScallopUI
                 if (!e.is_mouse()) return false;
 
                 const auto& m = e.mouse();
+
+                // Hover-to-focus: take focus when mouse enters this component
+                if (mouseBox.Contain(m.x, m.y) && !Focused()) {
+                    TakeFocus();
+                }
+
                 if (m.button == ftxui::Mouse::Left && m.motion == ftxui::Mouse::Pressed)
                     return handleMouseTakeover(m, e);
 

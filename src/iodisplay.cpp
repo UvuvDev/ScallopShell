@@ -102,6 +102,14 @@ namespace ScallopUI
 
             bool OnEvent(Event e) override
             {
+                // Hover-to-focus
+                if (e.is_mouse()) {
+                    const auto& m = e.mouse();
+                    if (renderBox_.Contain(m.x, m.y) && !Focused()) {
+                        TakeFocus();
+                    }
+                }
+
                 if (!Focused()) return false;
 
                 int totalLines = static_cast<int>(lines_.size());

@@ -55,10 +55,14 @@ namespace ScallopUI {
                     return true;
                 }
 
+                // Hover-to-focus
+                if (e.is_mouse()) {
+                    const auto& m = e.mouse();
+                    if (renderedArea.Contain(m.x, m.y) && !Focused()) {
+                        TakeFocus();
+                    }
+                }
 
-
-                
-                
                 return ComponentBase::OnEvent(e); // forward anything else
 
             }

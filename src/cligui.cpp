@@ -120,17 +120,19 @@ namespace ScallopUI
             }
 
             bool OnEvent(Event e) override {
-                // Mouse: click to focus (don’t change tabs!)
-                if (e.is_mouse() &&
-                    e.mouse().button == Mouse::Left &&
-                    e.mouse().motion == Mouse::Pressed &&
-                    mouseBox.Contain(e.mouse().x, e.mouse().y)) {
-                    TakeFocus();
-                    return true;  // consume the click
+                // Hover-to-focus and click-to-focus
+                if (e.is_mouse() && mouseBox.Contain(e.mouse().x, e.mouse().y)) {
+                    if (!Focused()) {
+                        TakeFocus();
+                    }
+                    // Consume clicks but not hovers
+                    if (e.mouse().button == Mouse::Left && e.mouse().motion == Mouse::Pressed) {
+                        return true;
+                    }
                 }
 
                 // Let the container handle focus traversal
-                if (e == Event::Tab || e == Event::TabReverse /* alias of TabReverse in some builds */)
+                if (e == Event::Tab || e == Event::TabReverse)
                     return false;
 
                 // If not focused, don't eat keys
@@ -187,28 +189,23 @@ namespace ScallopUI
 
         struct Impl : ComponentBase {
 
+            bool Focusable() const override { return false; }
+
             Element OnRender() override {
                 Elements lines;
-                
-                if (history.size() > historyMaxLen) 
-                    history.erase(history.begin()); // Keep lines shown to max length
 
-                for (int i = history.size() - 1; i >= 0; i--) 
+                if (history.size() > historyMaxLen)
+                    history.erase(history.begin());
+
+                for (int i = history.size() - 1; i >= 0; i--)
                     lines.push_back(text(history.at(i)));
-                
-                
-                auto display = vbox(std::move(lines)) | border | vscroll_indicator | frame | reflect(mouseBox);
 
-                if (Focused()) 
-                    return display | color(Color::Magenta);
-                
-                return display;
+                return vbox(std::move(lines)) | border | vscroll_indicator | frame;
             };
 
         };
 
         return Make<Impl>();
-        
 
     }
 

@@ -35,8 +35,20 @@ Component cpuPicker() {
         Component threadRadiobox_;
         Component container_;
         std::string cpuArt_;
+        Box renderBox_;
 
         bool Focusable() const override { return true; }
+
+        bool OnEvent(Event e) override {
+            // Hover-to-focus
+            if (e.is_mouse()) {
+                const auto& m = e.mouse();
+                if (renderBox_.Contain(m.x, m.y) && !Focused()) {
+                    TakeFocus();
+                }
+            }
+            return ComponentBase::OnEvent(e);
+        }
 
         void refreshVCPUList() {
             // Query current VCPU count from backend
@@ -112,7 +124,10 @@ Component cpuPicker() {
                     separator(),
                     threadSection | flex,
                 }),
-            }) | border;
+            }) | border | reflect(renderBox_);
+
+            if (Focused())
+                return content | color(Color::Magenta);
 
             return content;
         }

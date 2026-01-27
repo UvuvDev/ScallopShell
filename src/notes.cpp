@@ -37,14 +37,12 @@ void openNotes() {
 namespace ScallopUI
 {
 
-    
-
     Component Notepad()
     {
-
-        
         struct Impl : ComponentBase
         {
+            Component input_;
+            Box renderBox_;
 
             Impl()
             {
@@ -65,22 +63,43 @@ namespace ScallopUI
                         e |= borderRounded;
                     else
                         e |= borderEmpty;
-                    return e; // no bgcolor/inverted => transparent
+                    return e;
                 };
 
-                auto input = Input(&notes, opt);
-
-                Add(ftxui::CatchEvent(input, [this](ftxui::Event e)
-                                      {
-                                        
-                    if (e == ftxui::Event::CtrlS) {
-                        saveNotes();
-                        return true; 
-                    }
-                    return false; }));
+                input_ = Input(&notes, opt);
+                Add(input_);
             }
 
-            
+            bool Focusable() const override { return true; }
+
+            bool OnEvent(Event e) override
+            {
+                // Hover-to-focus
+                if (e.is_mouse()) {
+                    const auto& m = e.mouse();
+                    if (renderBox_.Contain(m.x, m.y) && !Focused()) {
+                        TakeFocus();
+                    }
+                }
+
+                // Ctrl+S to save
+                if (e == Event::CtrlS) {
+                    saveNotes();
+                    return true;
+                }
+
+                return input_->OnEvent(e);
+            }
+
+            Element OnRender() override
+            {
+                auto display = input_->Render() | reflect(renderBox_);
+
+                if (Focused())
+                    return display | color(Color::Magenta);
+
+                return display;
+            }
         };
 
         return Make<Impl>();
