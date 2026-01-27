@@ -119,14 +119,32 @@ namespace ScallopUI
             int cell_w = 3; // Each byte is 2 characters + a space
             int cell_h = 1; // one line per row
 
+            // Account for the header row ("Address Bytes") at the top.
+            // This keeps row selection aligned with the visible byte grid.
+            const int header_rows = 1;
+            ly -= header_rows;
+
+            if (lx < 0 || ly < 0)
+                return false;
+
             int col = lx / cell_w;
             int row = (ly / cell_h) + top_row_;
 
             selectedRow = row;
             selectedColumn = col;
 
-            if (selectedRow >= rows_)
-                return ComponentBase::OnEvent(e);
+            if (selectedRow < 0 || selectedRow >= rows_)
+                return false;
+
+            if (selectedColumn < 0 || selectedColumn >= bpr_)
+                return false;
+
+            // Guard against short reads near the end of memory.
+            if (data_ && !data_->empty()) {
+                const size_t idx = static_cast<size_t>(selectedRow) * bpr_ + selectedColumn;
+                if (idx >= data_->size())
+                    return false;
+            }
             editing_ = true;
 
             return true;
@@ -197,8 +215,8 @@ namespace ScallopUI
             ftxui::Box mouseBox; // Box where mouse can be
             int selectedRow = -1; // Where the mouse is selecting - row
             int selectedColumn = -1; // Where the mouse is selecting - column
-            int leftmostX = 0x15; // Offset that accounts for the displayed memory addresses pixels
-            int highestY = 2; // Offset that accounts for window border
+            int leftmostX = 0x10; // Offset that accounts for the displayed memory addresses pixels
+            int highestY = 1; // Offset that accounts for window border
             bool editing_ = false;           // Is editing? false = no
             int pending_nibble_ = -1;        // -1 = none, otherwise 0..15
             bool pushed_snapshot_ = false;
@@ -371,8 +389,20 @@ namespace ScallopUI
                     }
                 }
 
-                if (m.button == ftxui::Mouse::Left && m.motion == ftxui::Mouse::Pressed)
-                    return handleMouseTakeover(m, e);
+                if (m.button == ftxui::Mouse::Left && m.motion == ftxui::Mouse::Pressed) {
+                    // Let children (e.g., the Autopatch checkbox) handle clicks first.
+                    if (ComponentBase::OnEvent(e))
+                        return true;
+
+                    // Only enter edit mode when clicking within the byte grid area
+                    // (header + visible rows). Ignore footer/separator/checkbox clicks.
+                    const int local_y = m.y - mouseBox.y_min - highestY;
+                    const int grid_height = 1 /*header*/ + rows_;
+                    if (local_y >= 0 && local_y < grid_height)
+                        return handleMouseTakeover(m, e);
+
+                    return false;
+                }
 
                 return ComponentBase::OnEvent(e);
             }
