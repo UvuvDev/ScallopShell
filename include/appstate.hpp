@@ -102,14 +102,6 @@ struct AppState {
         focusPane(lastFocusedPane);
     }
 
-    // ===== Search state (example modal use case) =====
-    struct SearchState {
-        bool active = false;
-        std::string query;
-        std::string target;  // "memory", "disasm", etc.
-        std::function<void(const std::string&)> onSearch;
-    } search;
-
     // ===== Emulator state (could move more here) =====
     bool emulatorRunning = false;
 };
@@ -152,52 +144,6 @@ inline ftxui::Component ModalContainer(AppStatePtr state, ftxui::Component mainC
         }
         return false;  // Let main content handle
     });
-}
-
-// ===== Helper: Create a search modal =====
-inline ftxui::Component SearchModal(AppStatePtr state) {
-    using namespace ftxui;
-
-    InputOption opt = InputOption::Default();
-    opt.transform = [](InputState s) {
-        auto element = s.element;
-        if (s.is_placeholder) {
-            element = element | dim;
-        }
-        return element | color(Color::Magenta);
-    };
-
-    auto input = Input(&state->search.query, "", opt);
-
-    return Renderer(input, [=] {
-        return hbox({
-            text("Search: ") | bold | color(Color::Magenta),
-            input->Render(),
-        });
-    }) | CatchEvent([=](Event e) {
-        if (e == Event::Return) {
-            if (state->search.onSearch) {
-                state->search.onSearch(state->search.query);
-            }
-            state->closeModal("search");
-            state->restoreFocus();
-            return true;
-        }
-        // Let input handle other events
-        return input->OnEvent(e);
-    });
-}
-
-// ===== Helper: Open search for a specific target =====
-inline void openSearch(AppStatePtr state, const std::string& target,
-                       std::function<void(const std::string&)> onSearch) {
-    state->search.query.clear();
-    state->search.target = target;
-    state->search.onSearch = onSearch;
-    state->pushModal("search", SearchModal(state), [state] {
-        state->search.active = false;
-    });
-    state->search.active = true;
 }
 
 } // namespace ScallopUI
