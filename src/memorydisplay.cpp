@@ -2,6 +2,7 @@
 #include "emulatorAPI.hpp"
 #include <ftxui/component/component.hpp>
 #include <utility>
+#include <algorithm>
 #include "debug.hpp"
 
 using namespace ftxui;
@@ -48,29 +49,27 @@ namespace ScallopUI
     };
 
     /*===================================================*/
-    /*=                                                 =*/
-    /*=                                                 =*/
-    /*=                                                 =*/
-    /*=                                                 =*/
-    /*=                                                 =*/
-    /*=                                                 =*/    
-    /*=                                                 =*/    
-    /*===================================================*/
 
     Component MemoryDisplay(std::vector<uint8_t>* data, std::string followedReg, size_t size,
                             uint64_t base_addr, int bytesPerRow, int visibleRows)
+    {
+        // Use wrapper with no AppState
+        return MemoryDisplayWithState(nullptr, std::move(followedReg), size, base_addr, bytesPerRow, visibleRows);
+    }
+
+    Component MemoryDisplayWithState(AppStatePtr state, std::string followedReg, size_t size,
+                                      uint64_t base_addr, int bytesPerRow, int visibleRows)
     {
         class Impl : public ComponentBase
         {
         private:
 
         /**
-         * Commit the nibble, so basically this is what is supposed to set the data equal to what it needs to be.
-         * NOTE FOR LATER - Data seems to be being edited where this is called as well, check this out.
+         * Commit the nibble for hex editing
          */
         void commit_nibble(int v) {
             if (selectedRow < 0 || selectedColumn < 0) return;
-            
+
             const size_t idx = (size_t)selectedRow * bpr_ + selectedColumn;
             if (idx >= size_) return;
 
@@ -112,7 +111,6 @@ namespace ScallopUI
 
 
         bool handleMouseTakeover(ftxui::Mouse m, Event e) {
-
             // Local (x,y) inside the rendered element:
             int lx = m.x - mouseBox.x_min - leftmostX;
             int ly = m.y - mouseBox.y_min - highestY;
@@ -129,14 +127,52 @@ namespace ScallopUI
             if (selectedRow >= rows_)
                 return ComponentBase::OnEvent(e);
             editing_ = true;
-            
-            return true; 
 
+            return true;
         }
+
+        // Handle the goto address/register input
+        void handleGotoInput(const std::string& input) {
+            if (input.empty()) return;
+
+            // Check if it looks like a hex address (0x prefix)
+            if (input.size() > 2 && input[0] == '0' && (input[1] == 'x' || input[1] == 'X')) {
+                // It's an address - set base_addr directly and clear followedReg
+                try {
+                    base_addr_ = std::stoull(input, nullptr, 16);
+                    followedReg_.clear();
+                    cache_key_ = "addr_" + input;
+                    top_row_ = 0;
+                } catch (...) {
+                    // Invalid address, ignore
+                }
+            } else if (!input.empty() && std::all_of(input.begin(), input.end(), ::isxdigit)) {
+                // All hex digits - treat as hex address
+                try {
+                    base_addr_ = std::stoull(input, nullptr, 16);
+                    followedReg_.clear();
+                    cache_key_ = "addr_" + input;
+                    top_row_ = 0;
+                } catch (...) {
+                    // Invalid, ignore
+                }
+            } else {
+                // Assume it's a register name
+                followedReg_ = input;
+                cache_key_ = input;
+                top_row_ = 0;
+                // base_addr_ will be updated on next render
+            }
+
+            gotoMode_ = false;
+            gotoInput_.clear();
+        }
+
         public:
-            Impl(std::vector<uint8_t>* data, std::string followedReg, size_t size,
+            Impl(AppStatePtr appState, std::string followedReg, size_t size,
                  uint64_t base_addr, int bpr, int rows)
-                : data_(data),
+                : state_(appState),
+                  data_(nullptr),
                   size_(size ? size
                              : static_cast<size_t>(rows) * static_cast<size_t>(bpr)),
                   base_addr_(base_addr),
@@ -150,7 +186,8 @@ namespace ScallopUI
                   }
 
         private:
-            std::vector<uint8_t >* data_;
+            AppStatePtr state_;
+            std::vector<uint8_t>* data_;
             size_t size_;
             uint64_t base_addr_;
             int bpr_;
@@ -163,7 +200,7 @@ namespace ScallopUI
             int highestY = 2; // Offset that accounts for window border
             bool editing_ = false;           // Is editing? false = no
             int pending_nibble_ = -1;        // -1 = none, otherwise 0..15
-            bool pushed_snapshot_ = false; 
+            bool pushed_snapshot_ = false;
             std::vector<HexEditHistory> hexEditHistory;
             std::vector<std::pair<int,int>> editTrail;  // Highlights for edited bits
             std::string followedReg_;
@@ -171,6 +208,10 @@ namespace ScallopUI
             int current_vcpu = 0;
             bool autoPatch = false;
             Component shouldAutopatch;
+
+            // Goto mode state (inline input bar)
+            bool gotoMode_ = false;
+            std::string gotoInput_;
 
             bool Focusable() const override { return true; }
 
@@ -182,10 +223,39 @@ namespace ScallopUI
             {
                 const int max_rows = static_cast<int>((size_ + bpr_ - 1) / bpr_);
                 const int max_top = std::max(0, max_rows - rows_);
-                
+
+                // Handle goto mode input
+                if (gotoMode_) {
+                    if (e == Event::Escape) {
+                        gotoMode_ = false;
+                        gotoInput_.clear();
+                        return true;
+                    }
+                    if (e == Event::Return) {
+                        handleGotoInput(gotoInput_);
+                        return true;
+                    }
+                    if (e == Event::Backspace && !gotoInput_.empty()) {
+                        gotoInput_.pop_back();
+                        return true;
+                    }
+                    if (e.is_character()) {
+                        gotoInput_ += e.character();
+                        return true;
+                    }
+                    return true; // Consume all events in goto mode
+                }
+
+                // Ctrl+F or '/' to enter goto mode (when focused and not editing)
+                if (Focused() && !editing_ && (e == Event::CtrlF || e == Event::Character('/'))) {
+                    gotoMode_ = true;
+                    gotoInput_.clear();
+                    return true;
+                }
+
                 // Editing keystrokes
                 if (editing_) {
-                    // ESC cancels current nibble (but keeps any committed change)
+                    // Return commits and exits edit mode
                     if (e == Event::Return) {
                         pending_nibble_ = -1;
                         editing_ = false;
@@ -203,7 +273,6 @@ namespace ScallopUI
                             selectedRow = lastEdit.row;
                             selectedColumn = lastEdit.col;
                             hexEditHistory.pop_back();
-                            
                         }
                         if (!editTrail.empty()) {
                             editTrail.pop_back();
@@ -214,20 +283,22 @@ namespace ScallopUI
 
                     // Hex characters
                     if (e.is_character()) {
-                    char c = e.character()[0];
-                    int v = hexval(c);
-                    if (v >= 0) {
-                        commit_nibble(v);
-                        return true;
+                        char c = e.character()[0];
+                        int v = hexval(c);
+                        if (v >= 0) {
+                            commit_nibble(v);
+                            return true;
+                        }
                     }
-                    }
-                    // Ignore other keys while editing
-                    const auto& m = e.mouse();     
-                    if (m.button == ftxui::Mouse::Left && m.motion == ftxui::Mouse::Pressed) {   
+                    // Mouse click while editing
+                    const auto& m = e.mouse();
+                    if (m.button == ftxui::Mouse::Left && m.motion == ftxui::Mouse::Pressed) {
                         return handleMouseTakeover(m, e);
                     }
                     return false;
                 }
+
+                // Navigation keys (not editing)
                 if (e == Event::ArrowUp)
                 {
                     top_row_ = std::max(0, top_row_ - 1);
@@ -273,12 +344,11 @@ namespace ScallopUI
 
                 // If event is not a mouse, just return false
                 if (!e.is_mouse()) return false;
-                
 
                 const auto& m = e.mouse();
-                if (m.button == ftxui::Mouse::Left && m.motion == ftxui::Mouse::Pressed)              
+                if (m.button == ftxui::Mouse::Left && m.motion == ftxui::Mouse::Pressed)
                     return handleMouseTakeover(m, e);
-    
+
                 return ComponentBase::OnEvent(e);
             }
 
@@ -287,7 +357,6 @@ namespace ScallopUI
 
             Element OnRender() override
             {
-
                 // Check if a specific register is being tracked
                 if (!followedReg_.empty())
                 {
@@ -305,18 +374,14 @@ namespace ScallopUI
                 std::vector<Element> lines;
                 lines.reserve(rows_ + 2);
 
-
                 auto header = hbox({text(" Address             "), text("Bytes") | bold}) | underlined | dim;
                 lines.push_back(header);
-                //lines.push_back( hbox({text("Row = " + (std::to_string(selectedRow)) + "   Col = " + std::to_string(selectedColumn) + "   " + std::to_string(rows_))}));
-                
 
                 const int max_rows = static_cast<int>((size_ + bpr_ - 1) / bpr_);
                 const int end_row = std::min(top_row_ + rows_, max_rows);
 
                 for (int r = top_row_; r < end_row && data_ != nullptr && !data_->empty(); ++r)
                 {
-                    
                     size_t start = static_cast<size_t>(r) * bpr_;
 
                     // Write the address for currently selected address space
@@ -331,20 +396,20 @@ namespace ScallopUI
                         {
                             // Show the data bytes
                             uint8_t b = data_->at(idx);
-                            Element e = text(hex1ByteStr(b)) | color(Color::Magenta); // This is the actual text being displayed
-                            
+                            Element e = text(hex1ByteStr(b)) | color(Color::Magenta);
+
                             // Dim NULL bytes for readability
                             if (b == 0x00)
                                 e = e | dim;
 
-                            // Handle highlighting
+                            // Handle highlighting for edited bytes
                             bool isHighlighted = std::find(editTrail.begin(), editTrail.end(),
                                std::make_pair(r,i)) != editTrail.end();
                             if (isHighlighted) {
                                 e = e | bgcolor(Color::Black) | bold;
                             }
 
-                            byte_els.push_back(e); // Add the byte to the list of things to display
+                            byte_els.push_back(e);
                         }
                         else
                         {
@@ -352,28 +417,55 @@ namespace ScallopUI
                         }
                         if (i + 1 != bpr_)
                             byte_els.push_back(text(" "));
-
-                        // Meant to add spaces in betweeen the bytes. May come back to later
-                        //if ((i+1) % 8 == 0) byte_els.push_back(text(" | "));
                     }
 
                     // Add the lines to the box that will be displayed.
                     lines.push_back(hbox({addr_el, text(": "), hbox(std::move(byte_els))}));
                 }
 
-                // Final display - add border and focus
-                auto display =  vbox(std::move(lines), shouldAutopatch->Render()) | border | focus;
+                // Show what we're currently tracking
+                std::string trackingInfo;
+                if (!followedReg_.empty()) {
+                    trackingInfo = "Tracking: " + followedReg_ + " (/ or Ctrl+F to change)";
+                } else {
+                    trackingInfo = "Address: " + hex8ByteStr(base_addr_) + " (/ or Ctrl+F to change)";
+                }
+
+                // Final display
+                Element display;
+
+                if (gotoMode_) {
+                    // Show goto input bar - no bgcolor for transparent background
+                    auto gotoBar = hbox({
+                        text("Goto: ") | bold | color(Color::Magenta),
+                        text(gotoInput_) | color(Color::Magenta),
+                        text("_") | blink | color(Color::Magenta),
+                    });
+
+                    display = vbox({
+                        vbox(std::move(lines)),
+                        separator(),
+                        gotoBar,
+                        shouldAutopatch->Render(),
+                    }) | border | focus;
+                } else {
+                    display = vbox({
+                        vbox(std::move(lines)),
+                        separator(),
+                        text(trackingInfo) | dim,
+                        shouldAutopatch->Render(),
+                    }) | border | focus;
+                }
 
                 if (Focused())
                     return display | color(Color::Magenta) | reflect(mouseBox);
-                
-                return vbox({display | reflect(mouseBox)});
 
+                return vbox({display | reflect(mouseBox)});
             }
         };
 
         // IMPORTANT: pass the args to Impl here
-        return Make<Impl>(data, std::move(followedReg), size, base_addr, bytesPerRow, visibleRows);
+        return Make<Impl>(state, std::move(followedReg), size, base_addr, bytesPerRow, visibleRows);
     }
 
 }

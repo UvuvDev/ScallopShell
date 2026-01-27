@@ -1,14 +1,18 @@
+// ============================================================
+// EXAMPLE: Refactored main.cpp using centralized AppState
+// This is a sketch - adapt to your needs
+// ============================================================
+
 #include <cstdint>
 #include <vector>
 #include <string>
-#include <sstream>
-#include <iomanip>
-#include <algorithm>
+#include <memory>
 
 #include <ftxui/component/component.hpp>
 #include <ftxui/component/screen_interactive.hpp>
 #include <ftxui/dom/elements.hpp>
 
+#include "appstate.hpp"
 #include "memorydisplay.hpp"
 #include "cligui.hpp"
 #include "notes.hpp"
@@ -17,179 +21,133 @@
 #include "registerdisplay.hpp"
 #include "iodisplay.hpp"
 #include "cpupicker.hpp"
-#include "debug.hpp"
 
 using namespace ftxui;
 
-int main(int argc, char** argv)
-{
+int main(int argc, char** argv) {
+    CLI::App app{"Scallop Shell - Debugger"};
+    argv = app.ensure_utf8(argv);
 
-  CLI::App app{"Scallop Shell - Debugger"};
-  argv = app.ensure_utf8(argv);
+    std::string targetBinaryName = ".";
+    std::string arch = "x86_64";
+    bool system = false;
+    app.add_option("-f,--file", targetBinaryName, "Binary to debug")->required();
+    app.add_option("-a,--arch", arch, "Target Architecture");
+    app.add_option("-s,--system", system, "Is system?");
 
-  std::string targetBinaryName = ".";
-  std::string arch = "x86_64";
-  bool system = false;
-  app.add_option("-f,--file", targetBinaryName, "Binary to debug")->required();
-  app.add_option("-a,--arch", arch, "Target Architecture");
-  app.add_option("-s,--system", system, "Is system?");
+    CLI11_PARSE(app, argc, argv);
 
-  CLI11_PARSE(app, argc, argv);
+    // ===== Create shared state =====
+    auto state = std::make_shared<ScallopUI::AppState>();
 
-  ScallopUI::initCliCommands();
+    auto screen = ScreenInteractive::Fullscreen();
+    state->screen = &screen;
 
-  std::atomic<bool> running = true;
+    // Init emulator
+    Emulator emu;
+    int pid = emu.startEmulation(targetBinaryName, arch);
+    if (pid < 0) {
+        std::cerr << "Failed to start QEMU\n";
+    }
 
-  auto screen = ScreenInteractive::Fullscreen();
-  ftxui::ScreenInteractive* g_screen = &screen;
+    ScallopUI::initCliCommands();
 
-  Emulator emu;
-  int pid = emu.startEmulation(targetBinaryName, arch);
-  if (pid < 0) {
-      std::cerr << "Failed to start QEMU\n";
-  }
+    // ===== Create components, storing refs in state =====
+    const int memoryRange = 320;
 
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    // Using AppState-aware components
+    state->memory = ScallopUI::MemoryDisplayWithState(state, "rsp", memoryRange, 0, 8);
+    state->code = ScallopUI::MemoryDisplayWithState(state, "rip", memoryRange, 0, 8);
+    state->notes = ScallopUI::Notepad();
+    state->cpuPicker = ScallopUI::cpuPicker();
+    state->registers = ScallopUI::RegisterDisplay();
+    state->ioOutput = ScallopUI::ioDisplay();
+    state->disasm = ScallopUI::DisasmDisplay();
+    state->cliInput = ScallopUI::InputCli();
 
-  const int memoryRange = 320;
-  auto mem  = ScallopUI::MemoryDisplay(nullptr, "rsp", memoryRange, 0, 8);
-  auto code  = ScallopUI::MemoryDisplay(nullptr, "rip", memoryRange, 0, 8);
-  auto notes = ScallopUI::Notepad();
-  auto cpus = ScallopUI::cpuPicker();
-  auto regs = ScallopUI::RegisterDisplay();
-  auto ioOut = ScallopUI::ioDisplay();
+    auto cli_history = ScallopUI::CliHistory();
 
-  /*=================*/
+    // ===== Build layout (same as before, but using state->* for sizes) =====
+    auto tab_toggle = Toggle(&state->tabNames, &state->selectedTab);
+    auto tab_container = Container::Tab(
+        {state->memory, state->code, state->notes, state->cpuPicker},
+        &state->selectedTab
+    );
 
-  /*================*/
-
-
-  std::vector<std::string> tab_names{
-      "memory",
-      "code",
-      "notepad",
-      "cpu",
-  };
-  
-  int tab_selected = 0;
-  auto tab_toggle = Toggle(&tab_names, &tab_selected);
-
-  tab_toggle = CatchEvent(tab_toggle, [&](Event e){
-    if (!tab_toggle->Focused())
-      return false; // don't consume events if not focused
-    return false;
-  });
-
-  auto tab_container = Container::Tab(
-      {
-          mem,
-          code,
-          notes,
-          cpus,
-      },
-      &tab_selected);
-
-  auto container = Container::Vertical({
-      tab_toggle,
-      tab_container,
-  });
-
-  auto left_stack = Container::Vertical({
-    tab_toggle,
-    tab_container,
-  });
-
-  auto left_render = Renderer(left_stack, [&] {
-    return vbox({
+    auto left_stack = Container::Vertical({tab_toggle, tab_container});
+    auto left_render = Renderer(left_stack, [&] {
+        return vbox({
             tab_toggle->Render(),
             separator(),
             tab_container->Render(),
-          }) | border;
-  });
-  
-  /*===============*/
+        }) | border;
+    });
 
-  auto disasm = ScallopUI::DisasmDisplay();
-  int disasmSize = 50;
+    auto middle_render = Renderer(state->disasm, [&] {
+        return state->disasm->Render();
+    });
 
-  auto middle_stack = Container::Vertical({
-    disasm,        // ensure DisasmDisplay() is focusable
-  });
-  auto middle_render = Renderer(middle_stack, [&] {
-    return disasm->Render();
-  });
-  auto leftAndMiddleTop = ResizableSplitLeft(left_render, middle_render, &disasmSize);
+    auto leftAndMiddle = ResizableSplitLeft(left_render, middle_render, &state->disasmSplitSize);
 
-  /*===============*/
-  
-  int registerSize = 110;
+    auto right_render = Renderer(state->registers, [&] {
+        return state->registers->Render();
+    });
 
-  auto right_stack = Container::Vertical({
-    regs,        // ensure DisasmDisplay() is focusable
-  });
-  auto right_render = Renderer(middle_stack, [&] {
-    return hbox({regs->Render()});
-  });
+    auto centerTop = ResizableSplitLeft(leftAndMiddle, right_render, &state->registerSplitSize);
 
-  auto centerTop = ResizableSplitLeft(leftAndMiddleTop, right_render, &registerSize);
+    auto cli_split = ResizableSplitTop(state->cliInput, cli_history, &state->cliHistorySplitSize);
+    auto cli_io_split = ResizableSplitRight(state->ioOutput, cli_split, &state->ioSplitSize);
 
-  /*===============*/
+    auto mainContent = ResizableSplitBottom(cli_io_split, centerTop, &state->cliSplitSize);
 
-  auto cli_input = ScallopUI::InputCli();
-  auto cli_history = ScallopUI::CliHistory();
-  auto cli_pane = Container::Horizontal({
-    cli_input,
-    cli_history,
-    ioOut,
-  });
+    // ===== Wrap with modal container =====
+    auto root = ScallopUI::ModalContainer(state, mainContent);
 
-  int splitCliHistory = 5;
-  auto cli_split = ResizableSplitTop(cli_input, cli_history, &splitCliHistory);
-  int splitIoOutput = 150;
-  auto cli_history_io_split = ResizableSplitRight(ioOut, cli_split, &splitIoOutput);
+    // ===== Global keybindings =====
+    root = CatchEvent(root, [&](const Event& e) {
+        // Don't process global keys if modal is open
+        if (state->hasModal()) return false;
 
-  // Final vertical split: CLI (bottom) vs center (top)
-  int splitCliMem = 10;
-  auto root = ResizableSplitBottom(cli_history_io_split, centerTop, &splitCliMem);
+        // Focus shortcuts
+        if (e == Event::CtrlS) {
+            state->focusPane(ScallopUI::AppState::Pane::CLI);
+            return true;
+        }
+        if (e == Event::CtrlD) {
+            state->focusPane(ScallopUI::AppState::Pane::Disasm);
+            return true;
+        }
+        if (e == Event::CtrlA) {
+            state->focusPane(ScallopUI::AppState::Pane::Memory);
+            return true;
+        }
+        if (e == Event::CtrlM) {
+            state->focusPane(ScallopUI::AppState::Pane::Code);
+            return true;
+        }
+        if (e == Event::CtrlI) {
+            state->focusPane(ScallopUI::AppState::Pane::IO);
+            return true;
+        }
 
+        // Ctrl+F is handled by individual components (e.g., MemoryDisplay goto bar)
 
-  std::thread([&]{
-    while (running) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(25));
-        if (g_screen) g_screen->PostEvent(ftxui::Event::Custom);
-    }
-  }).detach();
+        return false;
+    });
 
+    // ===== Refresh thread =====
+    std::atomic<bool> running = true;
+    std::thread([&] {
+        while (running) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(25));
+            screen.PostEvent(Event::Custom);
+        }
+    }).detach();
 
-  root = CatchEvent(root, [&](const Event& e) {
-    // Example: focus CLI on Ctrl key press
-    if (e == Event::CtrlS) {
-        cli_input->TakeFocus();
-        return true;  // consume
-    }
-    else if (e == Event::CtrlD) {
-      disasm->TakeFocus();
-      return true;
-    }
-    else if (e == Event::CtrlA) {
-      mem->TakeFocus();
-      return true;
-    }
-    else if (e == Event::CtrlM) {
-      code->TakeFocus();
-      return true;
-    }
-    else if (e == Event::CtrlI) {
-      ioOut->TakeFocus();
-      return true;
-    }
+    // ===== Start =====
+    state->focusPane(ScallopUI::AppState::Pane::CLI);
+    screen.Loop(root);
 
-    return false;     // let others handle it
-  });
-
-  // Show it full-screen
-  screen.Loop(root);
-
-  running = false;
-  return 0;
+    running = false;
+    return 0;
 }
