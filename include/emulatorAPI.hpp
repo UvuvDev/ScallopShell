@@ -101,6 +101,7 @@ public:
     static int startEmulation(const std::string& executablePath, const std::string& arch, bool system = false);
 
     static int addBreakpoint(uint64_t address, std::string& comment);
+    static int deleteBreakpoint(uint64_t address);
 
     /**
      * Modify the memory from the address given until the address + n. 

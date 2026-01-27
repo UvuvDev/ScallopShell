@@ -9,6 +9,7 @@
 
 #include <atomic>
 #include <dlfcn.h>
+#include <sstream>
 #include <thread>
 #include <chrono>
 
@@ -18,6 +19,7 @@ int vcpu_current_thread_index = 0;
 char ScallopState::g_mem_path[256] = {0};
 char ScallopState::g_reg_path[256] = {0};
 FILE *ScallopState::g_out[MAX_VCPUS] = {nullptr};
+FILE *ScallopState::binaryConfigs[MAX_VCPUS] = {nullptr};
 int ScallopState::g_log_disas = 0;
 SymbolResolver ScallopState::g_resolver;
 
@@ -206,6 +208,10 @@ SCALLOP_REQUEST_TYPE ScallopState::classifyRequest(const std::string &request) c
     if (starts_with("break"))
     {
         return SCALLOP_REQUEST_TYPE::breakpoint;
+    }
+    if (starts_with("unbreak") || starts_with("delete break") || starts_with("del break"))
+    {
+        return SCALLOP_REQUEST_TYPE::deleteBreakpoint;
     }
     return SCALLOP_REQUEST_TYPE::defaultReq;
 }
@@ -454,6 +460,70 @@ int ScallopState::update(int vcpu)
             scallopstate.getGates().addBreakpoint(addr, vcpu_id);
             break;
         }
+        case SCALLOP_REQUEST_TYPE::deleteBreakpoint:
+        {
+            uint64_t addr = 0;
+            int vcpu_id = -1;
+            bool has_vcpu = false;
+
+            const std::string normalized = normalize_request(req.getRequest());
+            std::istringstream iss(normalized);
+            std::vector<std::string> parts;
+            for (std::string tok; iss >> tok; )
+            {
+                parts.push_back(std::move(tok));
+            }
+
+            int addr_index = -1;
+            if (!parts.empty() && parts[0] == "unbreak")
+            {
+                addr_index = 1;
+            }
+            else if (parts.size() >= 2 && parts[0] == "delete" && parts[1] == "break")
+            {
+                addr_index = 2;
+            }
+            else if (parts.size() >= 2 && parts[0] == "del" && parts[1] == "break")
+            {
+                addr_index = 2;
+            }
+
+            if (addr_index < 0 || addr_index >= static_cast<int>(parts.size()))
+            {
+                debug("[breakpoints] delete parse failed: %s\n", req.getRequest().c_str());
+                break;
+            }
+
+            char *end = nullptr;
+            addr = std::strtoull(parts[addr_index].c_str(), &end, 0);
+            if (!end || *end != '\0')
+            {
+                debug("[breakpoints] delete invalid addr: %s\n", parts[addr_index].c_str());
+                break;
+            }
+
+            const int vcpu_index = addr_index + 1;
+            if (vcpu_index < static_cast<int>(parts.size()))
+            {
+                vcpu_id = std::atoi(parts[vcpu_index].c_str());
+                has_vcpu = true;
+            }
+
+            debug("[breakpoints] delete req='%s' addr=%llx has_vcpu=%d vcpu=%d\n",
+                  req.getRequest().c_str(), addr, has_vcpu ? 1 : 0, vcpu_id);
+            if (has_vcpu)
+            {
+                scallopstate.getGates().deleteBreakpoint(addr, vcpu_id);
+            }
+            else
+            {
+                for (unsigned i = 0; i < MAX_VCPUS; i++)
+                {
+                    scallopstate.getGates().deleteBreakpoint(addr, static_cast<int>(i));
+                }
+            }
+            break;
+        }
         }
     }
 
@@ -490,6 +560,11 @@ static void plugin_exit(qemu_plugin_id_t id, void *u)
             fflush(scallopstate.g_out[i]);
             fclose(scallopstate.g_out[i]);
             scallopstate.g_out[i] = nullptr;
+        }
+        if (scallopstate.binaryConfigs[i] && scallopstate.binaryConfigs[i] != stderr) {
+            fflush(scallopstate.binaryConfigs[i]);
+            fclose(scallopstate.binaryConfigs[i]);
+            scallopstate.binaryConfigs[i] = nullptr;
         }
     }
 }
@@ -533,13 +608,24 @@ int qemu_plugin_install(qemu_plugin_id_t id, const qemu_info_t *info, int argc, 
 
     // Open per-vcpu branch log files
     for (unsigned i = 0; i < MAX_VCPUS; i++) {
-        std::string filename = "branchlog" + std::to_string(i) + ".csv";
-        scallopstate.g_out[i] = fopen((std::filesystem::temp_directory_path() / filename).c_str(), "w+");
+        // Open all the branchlogs containing instruction data
+        std::string outFilename = "branchlog" + std::to_string(i) + ".csv";
+        scallopstate.g_out[i] = fopen((std::filesystem::temp_directory_path() / outFilename).c_str(), "w+");
         if (!scallopstate.g_out[i]) {
-            fprintf(stderr, "[branchlog] failed to open '%s'\n", filename.c_str());
+            fprintf(stderr, "[branchlog] failed to open '%s'\n", outFilename.c_str());
             scallopstate.g_out[i] = stderr;
         }
         setvbuf(scallopstate.g_out[i], NULL, _IOLBF, 0);
+
+        // Open all the config files
+        std::string configFilename = "configFile" + std::to_string(i) + ".txt";
+        scallopstate.binaryConfigs[i] = fopen((std::filesystem::temp_directory_path() / configFilename).c_str(), "w+");
+        if (!scallopstate.binaryConfigs[i]) {
+            fprintf(stderr, "[branchlog] failed to open '%s'\n", configFilename.c_str());
+            scallopstate.binaryConfigs[i] = stderr;
+        }
+        setvbuf(scallopstate.binaryConfigs[i], NULL, _IOLBF, 0);
+
     }
 
     // Probably shouldnt hardcode this but whatever

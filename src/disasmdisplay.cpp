@@ -38,6 +38,7 @@ namespace ScallopUI {
                 }
 
                 // We currently don't have a removeBreakpoint API, so just clear locally.
+                Emulator::deleteBreakpoint(address);
                 breakpoints.erase(address);
             }
 

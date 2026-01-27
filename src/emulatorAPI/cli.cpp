@@ -34,3 +34,15 @@ int Emulator::addBreakpoint(uint64_t address, std::string &comment)
     return 0;
 }
 
+int Emulator::deleteBreakpoint(uint64_t address)
+{
+    char cmd[256];
+    std::snprintf(cmd, sizeof(cmd), "unbreak 0x%llx %d %s\n",
+                  address, selectedVCPU, selectedThread.c_str());
+    std::cerr << "[cli] send delete breakpoint: " << cmd;
+
+    if (socket.sendCommand(cmd).compare(0, 2, "ok") != 0)
+        return 1;
+
+    return 0;
+}

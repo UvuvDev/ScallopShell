@@ -46,6 +46,18 @@ public:
      * @param address Address to break at
      */
     int addBreakpoint(uint64_t address, int vcpu);
+
+    /**
+     * Remove a breakpoint from the specified address.
+     * @param address Address to remove
+     */
+    int deleteBreakpoint(uint64_t address, gate_t& gate);
+
+    /**
+     * Remove a breakpoint from the specified address.
+     * @param address Address to remove
+     */
+    int deleteBreakpoint(uint64_t address, int vcpu);
     
     /**
      * Checks if there's a breakpoint at the specified address

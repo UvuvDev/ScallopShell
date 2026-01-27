@@ -44,7 +44,8 @@ enum class SCALLOP_REQUEST_TYPE {
     resume,
     setMem,
     setReg,
-    breakpoint
+    breakpoint,
+    deleteBreakpoint
 };
 
 /**
@@ -124,6 +125,7 @@ public:
     static char g_mem_path[256];
     static char g_reg_path[256];
     static FILE *g_out[MAX_VCPUS];
+    static FILE *binaryConfigs[MAX_VCPUS];
     static int g_log_disas;
 
     vcpu_pending_ops vcpu_op[MAX_VCPUS];
