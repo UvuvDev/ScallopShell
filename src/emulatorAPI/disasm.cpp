@@ -1,6 +1,20 @@
 #include "emulatorAPI.hpp"
+#include <unordered_map>
 
 static std::vector<InstructionInfo> instructionInfo;
+
+// Per-VCPU index state
+struct VCPUIndexState {
+    std::vector<std::streamoff> lineOffsets;
+    std::streamoff lastIndexedOffset = 0;
+    uintmax_t lastIndexedSize = 0;
+    bool headerSkipped = false;
+    int cachedStart = -1;
+    int cachedN = -1;
+    uintmax_t cachedSize = 0;
+};
+
+static std::unordered_map<int, VCPUIndexState> vcpuIndexStates;
 
 
 static std::string trim(std::string s)
@@ -78,153 +92,189 @@ std::string Emulator::disassembleInstruction(uint64_t address,
     return {};
 }
 
+// Helper to check if a line is a data row (starts with 0x)
+static bool isDataLine(const std::string& line) {
+    std::string t = trim(line);
+    return (t.size() >= 3 && t[0] == '0' && (t[1] == 'x' || t[1] == 'X'));
+}
+
+// Build/extend the line offset index incrementally
+// Only scans new portions of the file - O(new_bytes) not O(total_bytes)
+static void updateLineIndex(std::ifstream& f, uintmax_t currentSize, VCPUIndexState& state) {
+    // File was truncated or replaced - rebuild index from scratch
+    if (currentSize < state.lastIndexedSize) {
+        state.lineOffsets.clear();
+        state.lastIndexedOffset = 0;
+        state.headerSkipped = false;
+    }
+
+    // Nothing new to index
+    if (static_cast<std::streamoff>(currentSize) <= state.lastIndexedOffset) {
+        return;
+    }
+
+    f.clear();
+    f.seekg(state.lastIndexedOffset, std::ios::beg);
+
+    // Handle header on first read
+    if (state.lastIndexedOffset == 0 && !state.headerSkipped) {
+        std::string firstLine;
+        if (std::getline(f, firstLine)) {
+            if (isDataLine(firstLine)) {
+                // First line is data, record its offset (0)
+                state.lineOffsets.push_back(0);
+            }
+            // else: it's a header, skip it
+            state.headerSkipped = true;
+        }
+    }
+
+    std::string line;
+    while (f) {
+        std::streamoff lineStart = f.tellg();
+        if (lineStart < 0) break;
+
+        if (!std::getline(f, line)) break;
+
+        std::string s = trim(line);
+        if (s.empty()) continue;
+
+        auto cols = parse_csv(s);
+        if (cols.size() < 7) continue;
+
+        if (isDataLine(s)) {
+            state.lineOffsets.push_back(lineStart);
+        }
+    }
+
+    state.lastIndexedOffset = static_cast<std::streamoff>(currentSize);
+    state.lastIndexedSize = currentSize;
+}
+
+// Parse a single line into InstructionInfo
+static InstructionInfo parseLine(const std::string& line) {
+    auto cols = parse_csv(line);
+
+    uint64_t pc = parse_hex(cols[0]);
+    std::string disType = trim(cols[1]);
+    uint64_t bt = parse_hex(cols[2]);
+    uint64_t ft = parse_hex(cols[3]);
+
+    std::string dis;
+    std::string symbol;
+    if (cols.size() >= 8) {
+        dis = trim(cols[6]);
+        symbol = trim(cols[7]);
+    } else {
+        dis.clear();
+        symbol = trim(cols.back());
+    }
+
+    if (disType.empty()) {
+        size_t i = 0;
+        while (i < dis.size() && std::isspace((unsigned char)dis[i])) ++i;
+        size_t j = i;
+        while (j < dis.size() && !std::isspace((unsigned char)dis[j])) ++j;
+        std::string m = dis.substr(i, j - i);
+        for (char &c : m) c = (char)std::tolower((unsigned char)c);
+
+        if (m == "ret" || m == "retq" || m == "retn" || m == "iret") disType = "ret";
+        else if (m == "jmp" || m == "ljmp") disType = "jmp";
+        else if (m == "call" || m == "callq" || m == "lcall") disType = "call";
+        else if (!m.empty() && m[0] == 'j' && m != "jmp") disType = "cond";
+        else disType = "other";
+    }
+
+    return InstructionInfo(std::move(dis), std::move(disType), std::move(symbol), pc, bt, ft, bt ? 1u : 0u);
+}
+
 std::vector<InstructionInfo>* Emulator::getRunInstructions(
     int start_line,
     int n,
     bool* updated,
     int* total_lines_out
 ) {
-    
-    std::filesystem::path kCsvPath = std::filesystem::temp_directory_path() / ("branchlog" + std::to_string(getSelectedVCPU()) + ".csv");
+    int vcpuId = getSelectedVCPU();
+    std::filesystem::path kCsvPath = std::filesystem::temp_directory_path() / ("branchlog" + std::to_string(vcpuId) + ".csv");
 
-    static int cached_start = -1, cached_n = -1;
-    static uintmax_t cached_size = 0;
-    static std::time_t cached_mtime = 0;
-    static int cached_total_lines = 0;
+    // Get or create per-VCPU state
+    VCPUIndexState& state = vcpuIndexStates[vcpuId];
 
     // ---------- file state ----------
     std::error_code ec;
     auto sz = std::filesystem::file_size(kCsvPath, ec);
-    std::time_t mt = 0;
+    if (ec) sz = 0;
 
-    if (!ec) { 
-        auto ft = std::filesystem::last_write_time(kCsvPath, ec);
-        if (!ec) {
-            auto sctp = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
-                ft - std::filesystem::file_time_type::clock::now() + std::chrono::system_clock::now());
-            mt = std::chrono::system_clock::to_time_t(sctp);
-        }
-    }
+    // Check if file changed (new data available)
+    const bool file_changed = (sz != state.cachedSize);
+    const bool request_unchanged = (state.cachedStart == start_line && state.cachedN == n);
 
-    const bool file_unchanged =
-        (cached_start == start_line && cached_n == n && sz == cached_size && mt == cached_mtime);
-
-    if (file_unchanged) {
+    // Only skip if BOTH file unchanged AND request unchanged
+    if (!file_changed && request_unchanged) {
         if (updated) *updated = false;
-        if (total_lines_out) *total_lines_out = cached_total_lines;
+        if (total_lines_out) *total_lines_out = static_cast<int>(state.lineOffsets.size());
         return &instructionInfo;
     }
 
-    // file changed or request changed
+    // File changed or request changed - report update
     if (updated) *updated = true;
-
-    instructionInfo.clear();
 
     std::ifstream f(kCsvPath, std::ios::in | std::ios::binary);
     if (!f) {
-        cached_start = start_line;
-        cached_n = n;
-        cached_size = sz;
-        cached_mtime = mt;
-        cached_total_lines = 0;
+        instructionInfo.clear();
+        state.lineOffsets.clear();
+        state.lastIndexedOffset = 0;
+        state.lastIndexedSize = 0;
+        state.headerSkipped = false;
+        state.cachedStart = start_line;
+        state.cachedN = n;
+        state.cachedSize = 0;
         if (total_lines_out) *total_lines_out = 0;
         return &instructionInfo;
     }
 
-    // ---------- header handling ----------
-    std::string line;
+    // Update line index incrementally - O(new_bytes) only
+    updateLineIndex(f, sz, state);
 
-    bool first_line_is_data = false;
-    std::streampos after_first = 0;
+    int total_lines = static_cast<int>(state.lineOffsets.size());
+    if (total_lines_out) *total_lines_out = total_lines;
 
-    if (std::getline(f, line)) {
-        std::string t = trim(line);
-        first_line_is_data = (t.size() >= 3 && t[0] == '0' && (t[1] == 'x' || t[1] == 'X'));
-        after_first = f.tellg();
+    // If request is the same and current window data is still valid,
+    // we can skip re-reading the lines (but we already reported updated=true above)
+    if (request_unchanged && start_line + n <= total_lines && !instructionInfo.empty()) {
+        state.cachedSize = sz;
+        return &instructionInfo;
     }
 
-    // If first line was header: keep stream after it.
-    // If first line was data: rewind so we include it in counting and paging.
-    if (first_line_is_data) {
+    // Need to re-read the requested lines
+    instructionInfo.clear();
+
+    // Seek directly to start_line and read only n lines - O(n)
+    if (start_line < total_lines) {
         f.clear();
-        f.seekg(0, std::ios::beg);
-    } else {
-        // already consumed header; keep going
-        // (we are currently positioned after first line)
-    }
+        f.seekg(state.lineOffsets[start_line], std::ios::beg);
 
-    // ---------- count + page in one pass ----------
-    int data_index = 0;       // counts ONLY valid data rows
-    int returned = 0;
-    int total_data_rows = 0;
+        std::string line;
+        int count = 0;
+        int lineIdx = start_line;
 
-    while (std::getline(f, line)) {
-        std::string s = trim(line);
-        if (s.empty()) continue;
+        while (std::getline(f, line) && (n <= 0 || count < n) && lineIdx < total_lines) {
+            std::string s = trim(line);
+            if (s.empty()) continue;
 
-        auto cols = parse_csv(s);
-        if (cols.size() < 7) continue; // minimum columns when symbol is present
+            auto cols = parse_csv(s);
+            if (cols.size() < 7) continue;
+            if (!isDataLine(s)) continue;
 
-        const std::string& c0 = cols[0];
-        if (c0.size() < 3 || !(c0[0] == '0' && (c0[1] == 'x' || c0[1] == 'X')))
-            continue; // not a data row
-
-        // This is a data row
-        total_data_rows++;
-
-        // If it's inside the requested window, parse & store it
-        if (data_index >= start_line && (n <= 0 || returned < n)) {
-            uint64_t pc = parse_hex(cols[0]);
-            std::string disType = trim(cols[1]);
-            uint64_t bt = parse_hex(cols[2]);
-            uint64_t ft = parse_hex(cols[3]);
-
-            // CSV layout (when disassembly is enabled):
-            // pc,kind,branch_target,fallthrough,tb_vaddr,bytes,disas,symbol
-            // Disassembly column is optional, but bytes is always present.
-            std::string dis;
-            std::string symbol;
-            if (cols.size() >= 8) {
-                dis = trim(cols[6]);
-                symbol = trim(cols[7]);
-            } else {
-                dis.clear();
-                symbol = trim(cols.back());
-            }
-
-            if (disType.empty()) {
-                // your fallback classify logic (unchanged)
-                size_t i = 0;
-                while (i < dis.size() && std::isspace((unsigned char)dis[i])) ++i;
-                size_t j = i;
-                while (j < dis.size() && !std::isspace((unsigned char)dis[j])) ++j;
-                std::string m = dis.substr(i, j - i);
-                for (char &c : m) c = (char)std::tolower((unsigned char)c);
-
-                if (m == "ret" || m == "retq" || m == "retn" || m == "iret") disType = "ret";
-                else if (m == "jmp" || m == "ljmp") disType = "jmp";
-                else if (m == "call" || m == "callq" || m == "lcall") disType = "call";
-                else if (!m.empty() && m[0] == 'j' && m != "jmp") disType = "cond";
-                else disType = "other";
-            }
-
-            instructionInfo.emplace_back(std::move(dis), std::move(disType), std::move(symbol), pc, bt, ft, bt ? 1u : 0u);
-            ++returned;
+            instructionInfo.push_back(parseLine(line));
+            ++count;
+            ++lineIdx;
         }
-
-        data_index++;
-
-        // If we've already returned n lines AND we only care about total_lines for PageDown,
-        // we still need to keep counting to end-of-file. So do NOT break.
     }
 
-    // cache bookkeeping
-    cached_start = start_line;
-    cached_n = n;
-    cached_size = sz;
-    cached_mtime = mt;
-    cached_total_lines = total_data_rows;
+    state.cachedStart = start_line;
+    state.cachedN = n;
+    state.cachedSize = sz;
 
-    if (total_lines_out) *total_lines_out = total_data_rows;
     return &instructionInfo;
 }
