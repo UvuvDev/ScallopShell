@@ -147,7 +147,7 @@ int main(int argc, char** argv) {
         }
 
         // Focus shortcuts
-        if (e == Event::CtrlS) {
+        if (e == Event::CtrlX) {
             state->focusPane(ScallopUI::AppState::Pane::CLI);
             return true;
         }

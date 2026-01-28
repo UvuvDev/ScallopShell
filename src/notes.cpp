@@ -1,4 +1,5 @@
 #include "notes.hpp"
+#include "emulatorAPI.hpp"
 
 using namespace ftxui;
 
@@ -8,7 +9,8 @@ void saveNotes() {
 
     std::fstream file;
 
-    file.open("notes.txt", std::ios_base::out);
+    std::filesystem::path notesPath = Emulator::getBreakpointConfigPath(Emulator::getSelectedVCPU()).parent_path() / "notes.txt";
+    file.open(notesPath, std::ios_base::out);
 
     file<<notes;
 
@@ -21,7 +23,8 @@ void openNotes() {
     std::ifstream file;
     std::string line;
 
-    file.open("notes.txt");
+    std::filesystem::path notesPath = Emulator::getBreakpointConfigPath(Emulator::getSelectedVCPU()).parent_path() / "notes.txt";
+    file.open(notesPath, std::ios_base::in);
 
     int linesRead = 0;
     while (std::getline(file, line)) {
