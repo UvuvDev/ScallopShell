@@ -12,6 +12,7 @@
 #include <sstream>
 #include <thread>
 #include <chrono>
+#include <sys/stat.h>
 #include <cstdlib>
 
 QEMU_PLUGIN_EXPORT int qemu_plugin_version = QEMU_PLUGIN_VERSION;
@@ -22,6 +23,8 @@ char ScallopState::g_reg_path[256] = {0};
 FILE *ScallopState::g_out[MAX_VCPUS] = {nullptr};
 FILE *ScallopState::binaryConfigs[MAX_VCPUS] = {nullptr};
 int ScallopState::g_log_disas = 0;
+timespec ScallopState::g_config_mtime[MAX_VCPUS] = {};
+bool ScallopState::g_config_mtime_valid[MAX_VCPUS] = {false};
 SymbolResolver ScallopState::g_resolver;
 
 ScallopState scallopstate;
@@ -155,7 +158,42 @@ namespace
             setvbuf(cfg, NULL, _IOLBF, 0);
             scallopstate.binaryConfigs[i] = cfg;
             scallopstate.getGates().loadBreakpointsFromFile(i, cfg);
+            struct stat st;
+            if (fstat(fileno(cfg), &st) == 0) {
+                scallopstate.g_config_mtime[i] = st.st_mtim;
+                scallopstate.g_config_mtime_valid[i] = true;
+            }
         }
+    }
+
+    bool config_mtime_changed(unsigned vcpu)
+    {
+        if (vcpu >= MAX_VCPUS) {
+            return false;
+        }
+        FILE *cfg = scallopstate.binaryConfigs[vcpu];
+        if (!cfg || cfg == stderr) {
+            return false;
+        }
+        int fd = fileno(cfg);
+        if (fd < 0) {
+            return false;
+        }
+        struct stat st;
+        if (fstat(fd, &st) != 0) {
+            return false;
+        }
+        if (!scallopstate.g_config_mtime_valid[vcpu]) {
+            scallopstate.g_config_mtime[vcpu] = st.st_mtim;
+            scallopstate.g_config_mtime_valid[vcpu] = true;
+            return false;
+        }
+        const timespec &last = scallopstate.g_config_mtime[vcpu];
+        if (st.st_mtim.tv_sec != last.tv_sec || st.st_mtim.tv_nsec != last.tv_nsec) {
+            scallopstate.g_config_mtime[vcpu] = st.st_mtim;
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -530,6 +568,15 @@ int ScallopState::update(int vcpu)
             }
             (void)thread_id;
             (void)thread_name;
+            ensure_binary_context_ready();
+            ensure_binary_configs_ready();
+            if (vcpu_id >= 0 && vcpu_id < static_cast<int>(MAX_VCPUS)) {
+                if (config_mtime_changed(static_cast<unsigned>(vcpu_id))) {
+                    scallopstate.getGates().loadBreakpointsFromFile(
+                        static_cast<unsigned>(vcpu_id),
+                        scallopstate.binaryConfigs[static_cast<unsigned>(vcpu_id)]);
+                }
+            }
             scallopstate.getGates().stepIfNeeded(vcpu_id, steps);
             break;
         }

@@ -25,6 +25,7 @@ extern "C" {
 #include <signal.h>
 #include <stdarg.h>
 #include <unistd.h>
+#include <time.h>
 #include "functional"
 #include <memory> 
 #include "filesystem"
@@ -128,6 +129,8 @@ public:
     static FILE *g_out[MAX_VCPUS];
     static FILE *binaryConfigs[MAX_VCPUS];
     static int g_log_disas;
+    static timespec g_config_mtime[MAX_VCPUS];
+    static bool g_config_mtime_valid[MAX_VCPUS];
 
     std::string binary_path;
     std::string binary_name;

@@ -2,6 +2,7 @@
 #include "emulatorAPI.hpp"
 
 #include <unordered_set>
+#include <filesystem>
 
 using namespace ftxui;
 
@@ -26,6 +27,9 @@ namespace ScallopUI {
             std::unordered_set<uint64_t> breakpoints;
             bool breakpointsLoaded = false;
             int lastBreakpointVcpu = -1;
+            std::filesystem::path lastBreakpointPath;
+            std::filesystem::file_time_type lastBreakpointMtime{};
+            bool lastBreakpointMtimeValid = false;
             AppStatePtr state_;
 
             void setBreakpoint(uint64_t address, bool enabled) {
@@ -132,7 +136,26 @@ namespace ScallopUI {
             
                 const std::vector<InstructionInfo>* assemblyInstructions = Emulator::getRunInstructions(currentTopRow, min_top, &hasUpdated, &totalLines);
                 const int currentVcpu = Emulator::getSelectedVCPU();
-                if (!breakpointsLoaded || hasUpdated || currentVcpu != lastBreakpointVcpu) {
+                const std::filesystem::path cfgPath = Emulator::getBreakpointConfigPath(currentVcpu);
+                bool configChanged = false;
+                if (cfgPath != lastBreakpointPath) {
+                    lastBreakpointPath = cfgPath;
+                    lastBreakpointMtimeValid = false;
+                    configChanged = true;
+                }
+                if (!cfgPath.empty()) {
+                    std::error_code ec;
+                    auto mtime = std::filesystem::last_write_time(cfgPath, ec);
+                    if (!ec) {
+                        if (!lastBreakpointMtimeValid || mtime != lastBreakpointMtime) {
+                            lastBreakpointMtime = mtime;
+                            lastBreakpointMtimeValid = true;
+                            configChanged = true;
+                        }
+                    }
+                }
+
+                if (!breakpointsLoaded || hasUpdated || currentVcpu != lastBreakpointVcpu || configChanged) {
                     breakpoints.clear();
                     for (uint64_t addr : Emulator::getBreakpointsFromConfig(currentVcpu)) {
                         breakpoints.insert(addr);

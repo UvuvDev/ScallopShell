@@ -126,3 +126,11 @@ std::vector<uint64_t> Emulator::getBreakpointsFromConfig(int vcpuIndex)
 
     return out;
 }
+
+std::filesystem::path Emulator::getBreakpointConfigPath(int vcpuIndex)
+{
+    if (vcpuIndex < 0) {
+        vcpuIndex = getSelectedVCPU();
+    }
+    return configPathForVCPU(binaryStem, vcpuIndex);
+}

@@ -103,6 +103,7 @@ public:
 
     static int addBreakpoint(uint64_t address, std::string& comment);
     static int deleteBreakpoint(uint64_t address);
+    static std::filesystem::path getBreakpointConfigPath(int vcpuIndex = -1);
     static std::vector<uint64_t> getBreakpointsFromConfig(int vcpuIndex = -1);
 
     /**
