@@ -11,6 +11,10 @@ int PluginNetwork::initialize() {
 
     std::this_thread::sleep_for(100ms);
 
+    if (connected_) {
+        tcp_client->shutDown();
+    }
+
     static MinimalSocket::Port server_port = 31337;
     static std::string server_address = "127.0.0.1";
 

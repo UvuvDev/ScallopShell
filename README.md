@@ -3,7 +3,7 @@
 
 <img width="520" height="520" alt="pixil-frame-0(2)" src="https://github.com/user-attachments/assets/499ccef4-afb0-4c02-888e-1045d65894cb" />
 
-Alpha 1.0.1  
+Alpha 1.1.0 
 
 ## Supported Platforms
 
