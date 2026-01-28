@@ -7,6 +7,7 @@
 #else
 
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/stat.h>
@@ -57,12 +58,46 @@ int Emulator::startEmulation(const std::string &executablePathArg)
     return 1;
 }
 #else
+
+static void stopEmulation() {
+    if (child_pid_ <= 0) return;
+
+    // Close the PTY master so the child loses its terminal I/O
+    if (qemu_output_fd_ != -1) { ::close(qemu_output_fd_); qemu_output_fd_ = -1; }
+    qemu_input_fd_ = -1;
+
+    // Because you called setsid() in the child, pid is (typically) also its pgid.
+    // Signal the whole process group.
+    ::kill(-child_pid_, SIGTERM);
+
+    // Wait a bit for clean shutdown
+    const int max_tries = 50;               // 50 * 10ms = 500ms
+    for (int i = 0; i < max_tries; i++) {
+        int status = 0;
+        pid_t r = ::waitpid(child_pid_, &status, WNOHANG);
+        if (r == child_pid_) { child_pid_ = -1; return; }
+        ::usleep(10 * 1000);
+    }
+
+    // Still alive -> hard kill whole group
+    ::kill(-child_pid_, SIGKILL);
+
+    // Reap (blocking, since we just SIGKILLed)
+    int status = 0;
+    (void)::waitpid(child_pid_, &status, 0);
+    child_pid_ = -1;
+}
+
 int Emulator::startEmulation(const std::string &executablePathArg, const std::string& arch, bool system)
 {
     static std::string executablePath = executablePathArg; // Path to the executable being debugged
     static std::string qemuArch = arch; // Architecture
     static bool isSystem = system; // Is system emulation
 
+    if (child_pid_ != -1) {
+        stopEmulation();
+    }
+    
     // If there's a new binary then replace the executable path
     if (executablePathArg != "")
     {
